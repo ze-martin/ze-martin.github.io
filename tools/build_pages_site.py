@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import html
+import re
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -30,13 +31,19 @@ def report_title(path: Path) -> str:
     )
 
 
+def report_sort_key(path: Path) -> tuple[str, float]:
+    match = re.search(r"(20\d{6})", path.name)
+    date_key = match.group(1) if match else "00000000"
+    return date_key, path.stat().st_mtime
+
+
 def copy_reports() -> list[dict[str, str]]:
     REPORTS.mkdir(parents=True, exist_ok=True)
     reports: list[dict[str, str]] = []
 
     html_files = sorted(
         OUTPUTS.glob("*.html"),
-        key=lambda file: file.stat().st_mtime,
+        key=report_sort_key,
         reverse=True,
     )
 
