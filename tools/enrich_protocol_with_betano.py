@@ -32,6 +32,7 @@ TEAM_ALIASES = {
     "netherlands": ["netherlands", "países bajos", "paises bajos", "holanda"],
     "brazil": ["brazil", "brasil"],
     "france": ["france", "francia"],
+    "morocco": ["morocco", "marruecos"],
     "spain": ["spain", "españa", "espana"],
     "england": ["england", "inglaterra"],
     "usa": ["usa", "estados unidos"],
