@@ -42,6 +42,8 @@ TEAM_ALIASES = {
     "uruguay": ["uruguay"],
     "chile": ["chile"],
     "peru": ["peru", "perú"],
+    "belgium": ["belgium", "bélgica", "belgica"],
+    "norway": ["norway", "noruega"],
 }
 
 MARKET_ORDER = [
