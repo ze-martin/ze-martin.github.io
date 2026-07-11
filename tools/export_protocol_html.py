@@ -80,6 +80,23 @@ def build_rows(data: dict) -> tuple[list[dict], list[dict], dict[str, list[dict]
     for result in data["results"]:
         rec = result.get("recommended_pick") or {}
         markets = result.get("all_markets", [])
+        if not rec:
+            betano_candidates = [
+                market
+                for market in markets
+                if market.get("odds_betano") is not None and market.get("ev_betano") is not None
+            ]
+            positive_betano = [market for market in betano_candidates if market.get("ev_betano", 0) > 0]
+            pool = positive_betano or betano_candidates
+            if pool:
+                rec = sorted(
+                    pool,
+                    key=lambda market: (
+                        market.get("ev_betano") or -999,
+                        market.get("probability") or 0,
+                    ),
+                    reverse=True,
+                )[0]
         with_api_odds = [m for m in markets if numeric(m, "odds_api", "odds") is not None]
         with_betano_odds = [m for m in markets if m.get("odds_betano") is not None]
         ev_api_pos = [m for m in markets if numeric(m, "ev_api", "ev") is not None and numeric(m, "ev_api", "ev") > 0]

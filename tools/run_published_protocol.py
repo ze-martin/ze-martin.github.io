@@ -8,6 +8,10 @@ import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNS = ROOT / "protocol" / "runs"
@@ -18,7 +22,7 @@ SITE = ROOT / "site"
 
 def run(command: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
     print("+", " ".join(command))
-    return subprocess.run(
+    completed = subprocess.run(
         command,
         cwd=ROOT,
         text=True,
@@ -26,8 +30,12 @@ def run(command: list[str], *, check: bool = True) -> subprocess.CompletedProces
         errors="replace",
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
-        check=check,
+        check=False,
     )
+    if check and completed.returncode != 0:
+        print(completed.stdout)
+        completed.check_returncode()
+    return completed
 
 
 def parse_date(value: str) -> date:
@@ -141,7 +149,13 @@ def validate_html(path: Path) -> None:
 
 def publish(days: list[date], message: str | None) -> str:
     build_pages()
-    add_paths = ["index.html", "latest.html", "tools\\enrich_protocol_with_betano.py", "tools\\export_protocol_html.py"]
+    add_paths = [
+        "index.html",
+        "latest.html",
+        "tools\\enrich_protocol_with_betano.py",
+        "tools\\export_protocol_html.py",
+        "tools\\run_published_protocol.py",
+    ]
     for day in days:
         compact = day.strftime("%Y%m%d")
         add_paths.extend(

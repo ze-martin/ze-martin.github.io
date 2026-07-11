@@ -248,11 +248,17 @@ async def click_normalized(page, target: str, prefer_market: bool = False) -> bo
 
 async def discover_event_links(page, matches: list[dict[str, str]]) -> dict[str, str]:
     await page.goto(BETANO_HOME, wait_until="load", timeout=60000)
-    await page.wait_for_timeout(random.randint(7000, 10000))
+    await page.wait_for_timeout(random.randint(10000, 13000))
     await close_overlays(page)
-    links = await page.locator("a[href*='/cuotas-de-partido/']").evaluate_all(
-        """els => els.map(a => ({text: a.innerText || '', href: a.href || ''}))"""
-    )
+    links: list[dict[str, str]] = []
+    for attempt in range(3):
+        links = await page.locator("a[href*='/cuotas-de-partido/']").evaluate_all(
+            """els => els.map(a => ({text: a.innerText || '', href: a.href || ''}))"""
+        )
+        if links or attempt == 2:
+            break
+        await page.mouse.wheel(0, 900)
+        await page.wait_for_timeout(random.randint(2500, 4500))
     found: dict[str, str] = {}
     for match in matches:
         home_aliases = aliases(match["home"])
