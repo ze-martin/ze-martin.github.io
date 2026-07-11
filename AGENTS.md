@@ -15,7 +15,8 @@ Mantener un sistema funcional para:
 6. Calcular EV por casa.
 7. Generar HTML/CSV navegables.
 8. Publicar reportes en GitHub Pages.
-9. Exponer API y dashboard del sistema base.
+9. Guardar memoria operativa, reportes, mercados, cuotas y EV en PostgreSQL.
+10. Exponer API y dashboard del sistema base.
 
 ## Estructura obligatoria del sistema base
 
@@ -101,6 +102,20 @@ python tools\run_published_protocol.py --dates YYYY-MM-DD,YYYY-MM-DD --leagues 1
 
 Sin `--publish`, solo genera archivos locales.
 
+También puede ejecutarse desde el entrypoint principal:
+
+```powershell
+python run.py --from YYYY-MM-DD --to YYYY-MM-DD --leagues 1 --published-protocol --publish
+```
+
+Este comando debe:
+
+- generar protocolo base;
+- enriquecer con Betano;
+- exportar HTML/CSV;
+- guardar en PostgreSQL si está disponible;
+- publicar en GitHub Pages si se usa `--publish`.
+
 ## Salidas oficiales
 
 Los reportes publicados viven en:
@@ -112,6 +127,42 @@ Los reportes publicados viven en:
 - Último reporte público: `latest.html`
 - Índice público: `index.html`
 - URL pública: `https://ze-martin.github.io/reports/protocolo_YYYYMMDD_pc.html`
+
+## Base de datos operativa
+
+El flujo completo debe persistirse en base de datos.
+
+Hay dos capas:
+
+1. PostgreSQL mediante `db/database.py`, cuando el servicio esté disponible.
+2. SQLite local mediante `db/local_protocol_store.py`, siempre disponible como respaldo en:
+
+   ```text
+   data/protocol_memory.sqlite
+   ```
+
+Tablas principales:
+
+- `agent_memory`: guarda la memoria operativa del flujo publicado bajo la clave `published_protocol_workflow`.
+- `protocol_report`: guarda un registro por fecha con rutas locales, URLs públicas, commit publicado y conteos.
+- `match`, `market`, `probability`, `odds`, `ev`: guardan partidos, mercados, probabilidades, cuotas y EV por casa.
+
+Cada vez que se ejecute `tools/run_published_protocol.py`, debe intentar:
+
+1. `Database.initialize()`
+2. `Database.seed_agent_memory()`
+3. `Database.save_protocol_run(...)`
+4. Si publica, `Database.update_protocol_report_commit(...)`
+
+Además, debe guardar siempre en SQLite local con `LocalProtocolStore`.
+
+Si PostgreSQL no está disponible, el protocolo no debe detenerse: debe avisar y continuar generando/publicando porque SQLite local conserva la memoria y los resultados.
+
+Para cargar protocolos históricos existentes en SQLite:
+
+```powershell
+python tools\backfill_protocol_memory.py
+```
 
 ## Reglas sobre cuotas y EV
 
@@ -179,7 +230,8 @@ Para cada fecha con partidos:
 4. Confirmar cuotas Betano.
 5. Confirmar que el HTML contiene `Cuota Betano`.
 6. Confirmar que el CSV tiene filas y columnas nuevas.
-7. Si se publicó, confirmar que GitHub Pages responde `200`.
+7. Confirmar que se intentó guardar en PostgreSQL o reportar claramente si la DB no estaba disponible.
+8. Si se publicó, confirmar que GitHub Pages responde `200`.
 
 ## Respuesta final al usuario
 

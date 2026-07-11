@@ -18,6 +18,7 @@ RUNS = ROOT / "protocol" / "runs"
 OUTPUTS = ROOT / "outputs"
 REPORTS = ROOT / "reports"
 SITE = ROOT / "site"
+PUBLIC_BASE = "https://ze-martin.github.io/reports"
 
 
 def run(command: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -147,6 +148,86 @@ def validate_html(path: Path) -> None:
         raise RuntimeError(f"El HTML no contiene la columna Cuota Betano: {path}")
 
 
+def save_run_to_database(
+    *,
+    day: date,
+    base_json: Path,
+    enriched_json: Path,
+    html_path: Path,
+    csv_path: Path,
+    commit: str | None = None,
+) -> None:
+    compact = day.strftime("%Y%m%d")
+    data = json.loads(enriched_json.read_text(encoding="utf-8"))
+    public_html_url = f"{PUBLIC_BASE}/protocolo_{compact}_pc.html"
+    public_csv_url = f"{PUBLIC_BASE}/protocolo_{compact}_pc_todos_los_mercados.csv"
+    try:
+        from db.local_protocol_store import LocalProtocolStore
+
+        local = LocalProtocolStore()
+        local.initialize()
+        local.seed_agent_memory()
+        stats = local.save_protocol_run(
+            report_date=day,
+            protocol_json=data,
+            source_json=base_json,
+            enriched_json=enriched_json,
+            html_path=html_path,
+            csv_path=csv_path,
+            public_html_url=public_html_url,
+            public_csv_url=public_csv_url,
+            published_commit=commit,
+        )
+        print(f"SQLite guardada {day.isoformat()}: {stats}")
+    except Exception as exc:
+        print(f"AVISO: no se pudo guardar en SQLite local: {exc}")
+
+    try:
+        from db.database import Database
+
+        db = Database()
+        db.initialize()
+        db.seed_agent_memory()
+        stats = db.save_protocol_run(
+            report_date=day,
+            protocol_json=data,
+            source_json=base_json,
+            enriched_json=enriched_json,
+            html_path=html_path,
+            csv_path=csv_path,
+            public_html_url=public_html_url,
+            public_csv_url=public_csv_url,
+            published_commit=commit,
+        )
+        print(f"DB guardada {day.isoformat()}: {stats}")
+    except Exception as exc:
+        print(f"AVISO: no se pudo guardar en PostgreSQL: {exc}")
+
+
+def update_database_commit(days: list[date], commit: str) -> None:
+    try:
+        from db.local_protocol_store import LocalProtocolStore
+
+        local = LocalProtocolStore()
+        local.initialize()
+        local.seed_agent_memory()
+        for day in days:
+            local.update_protocol_report_commit(day, commit)
+    except Exception as exc:
+        print(f"AVISO: no se pudo actualizar commit en SQLite local: {exc}")
+
+    try:
+        from db.database import Database
+
+        db = Database()
+        db.initialize()
+        db.seed_agent_memory()
+        for day in days:
+            db.update_protocol_report_commit(day, commit)
+    except Exception as exc:
+        print(f"AVISO: no se pudo actualizar commit en PostgreSQL: {exc}")
+
+
 def publish(days: list[date], message: str | None) -> str:
     build_pages()
     add_paths = [
@@ -191,6 +272,7 @@ def main() -> None:
     parser.add_argument("--leagues", default="1", help="Ligas API-Football. Mundial = 1")
     parser.add_argument("--betano-python", help="Python alternativo con Playwright instalado")
     parser.add_argument("--publish", action="store_true", help="Publica en GitHub Pages con commit/push")
+    parser.add_argument("--no-db", action="store_true", help="No guarda memoria ni resultados en PostgreSQL")
     parser.add_argument("--commit-message", help="Mensaje de commit si se usa --publish")
     args = parser.parse_args()
 
@@ -215,6 +297,14 @@ def main() -> None:
         enriched_json = enrich_betano(base_json, day, args.betano_python)
         html_path, csv_path = export_report(enriched_json, day)
         validate_html(html_path)
+        if not args.no_db:
+            save_run_to_database(
+                day=day,
+                base_json=base_json,
+                enriched_json=enriched_json,
+                html_path=html_path,
+                csv_path=csv_path,
+            )
         generated.append(
             {
                 "date": day.isoformat(),
@@ -229,6 +319,8 @@ def main() -> None:
     commit = ""
     if args.publish and days_with_reports:
         commit = publish(days_with_reports, args.commit_message)
+        if not args.no_db:
+            update_database_commit(days_with_reports, commit)
 
     print("\n=== Resumen ===")
     print(json.dumps({"generated": generated, "published_commit": commit}, ensure_ascii=False, indent=2))
