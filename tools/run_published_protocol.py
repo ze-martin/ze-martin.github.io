@@ -14,6 +14,8 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 RUNS = ROOT / "protocol" / "runs"
 OUTPUTS = ROOT / "outputs"
 REPORTS = ROOT / "reports"
