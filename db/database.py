@@ -166,7 +166,7 @@ class Database:
             },
             "rules": [
                 "No inventar partidos si matches=0.",
-                "No mezclar cuotas; mantener columnas 10Bet/API y Betano separadas.",
+                "No mezclar cuotas; mantener columnas API-Football y Betano separadas.",
                 "Si Betano no tiene equivalente, dejar vacío o No encontrado en Betano.",
                 "Publicar en GitHub Pages salvo instrucción contraria.",
                 "Validar HTML, CSV y respuesta HTTP 200 antes de responder.",
@@ -442,7 +442,7 @@ class Database:
         if source == "api":
             odds_value = market.get("odds_api", market.get("odds"))
             ev_value = market.get("ev_api", market.get("ev"))
-            bookmaker = market.get("bookmaker_api") or market.get("bookmaker") or "10Bet/API"
+            bookmaker = market.get("bookmaker_api") or market.get("bookmaker") or "API-Football"
         else:
             odds_value = market.get("odds_betano")
             ev_value = market.get("ev_betano")

@@ -97,7 +97,7 @@ class LocalProtocolStore:
             ],
             "rules": [
                 "No inventar partidos ni cuotas.",
-                "Separar cuotas 10Bet/API y Betano.",
+                "Separar cuotas API-Football y Betano.",
                 "Publicar en GitHub Pages salvo instrucción contraria.",
             ],
         }

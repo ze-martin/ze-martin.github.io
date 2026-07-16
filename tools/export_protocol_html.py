@@ -135,7 +135,7 @@ def build_rows(data: dict) -> tuple[list[dict], list[dict], dict[str, list[dict]
                     "fecha": result.get("date_lima", ""),
                     "hora": result.get("time_lima", ""),
                     "partido": result.get("match", ""),
-                    "bookmaker_api": market.get("bookmaker_api") or market.get("bookmaker") or result.get("bookmaker") or "",
+                    "bookmaker_api": (market.get("bookmaker_api") or market.get("bookmaker") or result.get("bookmaker") or "") if api_odds is not None else "",
                     "bookmaker_betano": market.get("bookmaker_betano") or ("Betano" if market.get("odds_betano") is not None else ""),
                     "pick": clean(market.get("market")),
                     "market_original": market.get("market") or "",
@@ -295,13 +295,13 @@ th{{position:sticky;top:0;background:#18233a;z-index:2;color:#cfe0ff;cursor:poin
     <div class="kpis">
       <div class="kpi"><span class="small">Partidos</span><b>{len(summary)}</b></div>
       <div class="kpi"><span class="small">Mercados</span><b>{len(rows)}</b></div>
-      <div class="kpi"><span class="small">Con cuota 10Bet/API</span><b>{sum(1 for row in rows if row["cuota_api"])}</b></div>
+      <div class="kpi"><span class="small">Con cuota API-Football</span><b>{sum(1 for row in rows if row["cuota_api"])}</b></div>
       <div class="kpi"><span class="small">Con cuota Betano</span><b>{sum(1 for row in rows if row["cuota_betano"])}</b></div>
     </div>
-    <p class="small"><span class="badge">Nota</span> 10Bet/API viene del proveedor del protocolo. Betano se scrapea en vivo desde betano.pe y puede cambiar.</p>
+    <p class="small"><span class="badge">Nota</span> API-Football puede devolver distintos bookmakers; la columna <b>Book API-Football</b> muestra la casa real disponible para cada mercado. Betano se scrapea en vivo desde betano.pe y puede cambiar.</p>
     <div class="tablewrap" style="max-height:none;margin-top:14px">
       <table id="summary">
-        <thead><tr><th>Hora</th><th>Partido</th><th>Pick principal</th><th>Prob</th><th>Cuota 10Bet/API</th><th>EV 10Bet/API</th><th>Cuota Betano</th><th>EV Betano</th><th>Mercados</th><th>Con 10Bet/API</th><th>Con Betano</th><th>EV+ 10Bet/API</th><th>EV+ Betano</th></tr></thead>
+        <thead><tr><th>Hora</th><th>Partido</th><th>Pick principal</th><th>Prob</th><th>Cuota API-Football</th><th>EV API-Football</th><th>Cuota Betano</th><th>EV Betano</th><th>Mercados</th><th>Con API-Football</th><th>Con Betano</th><th>EV+ API-Football</th><th>EV+ Betano</th></tr></thead>
         <tbody>{summary_rows}</tbody>
       </table>
     </div>
@@ -311,13 +311,13 @@ th{{position:sticky;top:0;background:#18233a;z-index:2;color:#cfe0ff;cursor:poin
     <div class="controls">
       <div><label>Buscar</label><input id="q" placeholder="Ej: corners, goles +1.5, Argentina"></div>
       <div><label>Partido</label><select id="match"><option value="">Todos</option>{options}</select></div>
-      <div><label>Filtro</label><select id="filter"><option value="all">Todos</option><option value="evpos">EV positivo en alguna casa</option><option value="api">Con cuota 10Bet/API</option><option value="betano">Con cuota Betano</option><option value="no_betano">Sin cuota Betano</option></select></div>
+      <div><label>Filtro</label><select id="filter"><option value="all">Todos</option><option value="evpos">EV positivo en alguna casa</option><option value="api">Con cuota API-Football</option><option value="betano">Con cuota Betano</option><option value="no_betano">Sin cuota Betano</option></select></div>
       <div><label>Acción</label><button onclick="resetFilters()">Limpiar filtros</button></div>
     </div>
-    <p class="small"><span class="badge">Tip</span> Click en encabezados para ordenar. Verde = EV positivo en 10Bet/API o Betano.</p>
+    <p class="small"><span class="badge">Tip</span> Click en encabezados para ordenar. Verde = EV positivo en API-Football o Betano.</p>
     <div class="tablewrap">
       <table id="markets">
-        <thead><tr><th>#</th><th>Hora</th><th>Partido</th><th>Pick</th><th>Prob</th><th>Book 10Bet/API</th><th>Cuota 10Bet/API</th><th>EV 10Bet/API</th><th>Book Betano</th><th>Cuota Betano</th><th>EV Betano</th><th>Estado 10Bet/API</th><th>Estado Betano</th><th>Confianza</th><th>Fuente</th><th>Riesgo</th></tr></thead>
+        <thead><tr><th>#</th><th>Hora</th><th>Partido</th><th>Pick</th><th>Prob</th><th>Book API-Football</th><th>Cuota API-Football</th><th>EV API-Football</th><th>Book Betano</th><th>Cuota Betano</th><th>EV Betano</th><th>Estado API-Football</th><th>Estado Betano</th><th>Confianza</th><th>Fuente</th><th>Riesgo</th></tr></thead>
         <tbody>{"".join(body_rows)}</tbody>
       </table>
     </div>

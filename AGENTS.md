@@ -11,7 +11,7 @@ Mantener un sistema funcional para:
 2. Recopilar datos deportivos.
 3. Calcular probabilidades.
 4. Obtener cuotas de Betano mediante Playwright.
-5. Comparar cuotas 10Bet/API vs Betano.
+5. Comparar cuotas API-Football vs Betano, mostrando el bookmaker real devuelto por API-Football.
 6. Calcular EV por casa.
 7. Generar HTML/CSV navegables.
 8. Publicar reportes en GitHub Pages.
@@ -166,13 +166,14 @@ python tools\backfill_protocol_memory.py
 
 ## Reglas sobre cuotas y EV
 
-- No mezclar cuotas de casas distintas en una sola columna.
+- No mezclar cuotas de fuentes/casas distintas en una sola columna.
 - El HTML/CSV debe mostrar explícitamente:
-  - `Cuota 10Bet/API`
-  - `EV 10Bet/API`
+  - `Book API-Football`
+  - `Cuota API-Football`
+  - `EV API-Football`
   - `Cuota Betano`
   - `EV Betano`
-- Las cuotas 10Bet/API vienen del proveedor usado por el protocolo base.
+- Las cuotas API-Football vienen del endpoint de odds de API-Football y pueden corresponder a distintos bookmakers. Mostrar siempre el bookmaker real, por ejemplo `10Bet`, si viene disponible.
 - Las cuotas Betano se scrapean desde `betano.pe` y pueden cambiar en vivo.
 - Si Betano no tiene un mercado equivalente, dejarlo vacío o como “No encontrado en Betano”.
 - No inventar cuotas para completar huecos.
@@ -226,7 +227,7 @@ Para cada fecha con partidos:
 
 1. Confirmar cantidad de partidos.
 2. Confirmar cantidad de mercados.
-3. Confirmar cuotas 10Bet/API.
+3. Confirmar cuotas API-Football y bookmaker real devuelto por la API.
 4. Confirmar cuotas Betano.
 5. Confirmar que el HTML contiene `Cuota Betano`.
 6. Confirmar que el CSV tiene filas y columnas nuevas.
@@ -240,7 +241,7 @@ Responder en español con:
 - partidos encontrados;
 - resumen por fecha;
 - pick principal por partido;
-- cuotas 10Bet/API y Betano;
+- cuotas API-Football, bookmaker API real y Betano;
 - enlaces HTML/CSV;
 - advertencia breve: las cuotas Betano pueden moverse en vivo.
 

@@ -340,16 +340,19 @@ def enrich_data(data: dict[str, Any], betano: dict[str, dict[str, Any]]) -> dict
     for result in enriched.get("results", []):
         scraped = betano.get(result.get("match", ""), {})
         odds_map = scraped.get("odds", {}) or {}
+        api_bookmaker = result.get("bookmaker") or None
+        if api_bookmaker == "Sin cuota":
+            api_bookmaker = None
         result["bookmakers"] = {
-            "api_primary": result.get("bookmaker") or "10Bet",
+            "api_primary": api_bookmaker,
             "betano": "Betano" if odds_map else None,
         }
         result["betano_source_url"] = scraped.get("url")
         result["betano_market_count"] = scraped.get("market_count", 0)
         for market in result.get("all_markets", []):
-            market["bookmaker_api"] = market.get("bookmaker") or result.get("bookmaker") or "10Bet"
             market["odds_api"] = market.get("odds")
             market["ev_api"] = market.get("ev")
+            market["bookmaker_api"] = (market.get("bookmaker") or api_bookmaker or "API-Football") if market["odds_api"] is not None else None
             market["bookmaker_betano"] = "Betano" if odds_map else None
             betano_odds = odds_map.get(market.get("key"))
             market["odds_betano"] = betano_odds
@@ -363,9 +366,9 @@ def enrich_data(data: dict[str, Any], betano: dict[str, dict[str, Any]]) -> dict
                 market["status_betano"] = "EV negativo Betano"
         rec = result.get("recommended_pick") or {}
         if rec:
-            rec["bookmaker_api"] = rec.get("bookmaker") or result.get("bookmaker") or "10Bet"
             rec["odds_api"] = rec.get("odds")
             rec["ev_api"] = rec.get("ev")
+            rec["bookmaker_api"] = (rec.get("bookmaker") or api_bookmaker or "API-Football") if rec["odds_api"] is not None else None
             rec["bookmaker_betano"] = "Betano" if odds_map else None
             betano_odds = odds_map.get(rec.get("key"))
             rec["odds_betano"] = betano_odds
