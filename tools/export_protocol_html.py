@@ -160,6 +160,18 @@ def build_rows(data: dict) -> tuple[list[dict], list[dict], dict[str, list[dict]
     return rows, summary, top_ev
 
 
+def build_title(data: dict, report_date: str) -> str:
+    leagues = []
+    seen = set()
+    for result in data.get("results", []):
+        league = (result.get("league") or "").strip()
+        if league and league not in seen:
+            seen.add(league)
+            leagues.append(league)
+    scope = " + ".join(leagues) if leagues else "Protocolo apuestas"
+    return f"Protocolo completo - {scope} - {report_date}"
+
+
 def write_csv(rows: list[dict], path: Path) -> None:
     fields = [
         "fecha",
@@ -381,7 +393,7 @@ def main() -> None:
     html_path = out / f"{args.prefix}.html"
     csv_path = out / f"{args.prefix}_todos_los_mercados.csv"
     write_csv(rows, csv_path)
-    write_html(rows, summary, src, f"Protocolo completo - Mundial 2026 - {args.date}", html_path)
+    write_html(rows, summary, src, build_title(data, args.date), html_path)
 
     print(html_path.resolve())
     print(csv_path.resolve())
