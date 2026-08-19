@@ -8,7 +8,7 @@ import os
 import time as time_module
 import urllib.parse
 import urllib.request
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timezone, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +26,7 @@ class FootballAPI:
         self.seasons_by_league = self._mapping(os.getenv("API_FOOTBALL_SEASONS_BY_LEAGUE", ""))
         self.include_premium_context = os.getenv("API_FOOTBALL_PREMIUM_CONTEXT", "true").lower() == "true"
         self.request_delay_seconds = float(os.getenv("API_FOOTBALL_REQUEST_DELAY_SECONDS", "0.25"))
+        self.fixture_timezone = os.getenv("API_FOOTBALL_FIXTURE_TIMEZONE", "America/Lima")
         self.last_errors: list[str] = []
         self._response_cache: dict[str, dict[str, Any]] = {}
         self.cache_enabled = os.getenv("API_FOOTBALL_CACHE_ENABLED", "true").lower() != "false"
@@ -126,25 +127,67 @@ class FootballAPI:
         enrich: bool,
     ) -> list[dict[str, Any]]:
         matches: list[dict[str, Any]] = []
+        seen_fixture_ids: set[str] = set()
         for league in leagues:
-            payload = self._api_get(
-                "fixtures",
-                {
-                    "from": from_date.isoformat(),
-                    "to": to_date.isoformat(),
-                    "league": league,
-                    "season": self._season_for_league(league),
-                },
-            )
-            self._remember_api_errors(payload, f"fixtures league {league}")
-            for fixture in payload.get("response", []):
-                normalized = self._normalize_fixture(fixture, fallback_league=league)
-                if not normalized:
-                    continue
-                if enrich:
-                    normalized["raw"] = self._enrich_api_football_fixture(fixture, self._season_for_league(league))
-                matches.append(normalized)
+            for season in self._candidate_seasons_for_league(league, from_date, to_date):
+                fixture_queries = [
+                    (
+                        {
+                            "from": from_date.isoformat(),
+                            "to": to_date.isoformat(),
+                            "league": league,
+                            "season": season,
+                        },
+                        f"fixtures league {league} season {season}",
+                    )
+                ]
+                current = from_date
+                while current <= to_date:
+                    fixture_queries.append(
+                        (
+                            {
+                                "date": current.isoformat(),
+                                "league": league,
+                                "season": season,
+                                "timezone": self.fixture_timezone,
+                            },
+                            f"fixtures league {league} season {season} date {current.isoformat()}",
+                        )
+                    )
+                    current += timedelta(days=1)
+
+                for params, context in fixture_queries:
+                    payload = self._api_get("fixtures", params)
+                    self._remember_api_errors(payload, context)
+                    for fixture in payload.get("response", []):
+                        fixture_id = str(fixture.get("fixture", {}).get("id") or "")
+                        if fixture_id and fixture_id in seen_fixture_ids:
+                            continue
+                        normalized = self._normalize_fixture(fixture, fallback_league=league)
+                        if not normalized:
+                            continue
+                        if fixture_id:
+                            seen_fixture_ids.add(fixture_id)
+                        if enrich:
+                            normalized["raw"] = self._enrich_api_football_fixture(fixture, season)
+                        matches.append(normalized)
         return matches
+
+    def _candidate_seasons_for_league(self, league: int | str, from_date: date, to_date: date) -> list[str]:
+        candidates = [
+            self._season_for_league(league),
+            self.season,
+            str(from_date.year),
+            str(to_date.year),
+        ]
+        seen: set[str] = set()
+        seasons: list[str] = []
+        for item in candidates:
+            season = str(item).strip()
+            if season and season not in seen:
+                seen.add(season)
+                seasons.append(season)
+        return seasons
 
     def _enrich_api_football_fixture(self, fixture: dict[str, Any], season: str) -> dict[str, Any]:
         raw = dict(fixture)
