@@ -235,6 +235,7 @@ def publish(days: list[date], message: str | None) -> str:
     add_paths = [
         "index.html",
         "latest.html",
+        "data\\protocol_memory.sqlite",
         "tools\\enrich_protocol_with_betano.py",
         "tools\\export_protocol_html.py",
         "tools\\run_published_protocol.py",
@@ -259,6 +260,27 @@ def publish(days: list[date], message: str | None) -> str:
     print(pull.stdout)
     if pull.returncode != 0:
         raise RuntimeError("git pull --rebase falló. Resolver conflictos y repetir push.")
+    push = run(["git", "push", "origin", "main"])
+    print(push.stdout)
+    rev = run(["git", "rev-parse", "--short", "HEAD"])
+    return rev.stdout.strip()
+
+
+def publish_memory_commit(days: list[date]) -> str:
+    status = run(["git", "status", "--short", "--", "data\\protocol_memory.sqlite"], check=False)
+    if not status.stdout.strip():
+        rev = run(["git", "rev-parse", "--short", "HEAD"])
+        return rev.stdout.strip()
+    run(["git", "add", "--", "data\\protocol_memory.sqlite"])
+    day_text = ", ".join(day.isoformat() for day in days)
+    commit = run(["git", "commit", "-m", f"Actualizar memoria commit protocolos {day_text}"], check=False)
+    print(commit.stdout)
+    if commit.returncode != 0 and "nothing to commit" not in commit.stdout.lower():
+        raise RuntimeError("No se pudo crear commit de memoria")
+    pull = run(["git", "pull", "--rebase", "origin", "main"], check=False)
+    print(pull.stdout)
+    if pull.returncode != 0:
+        raise RuntimeError("git pull --rebase falló al publicar memoria.")
     push = run(["git", "push", "origin", "main"])
     print(push.stdout)
     rev = run(["git", "rev-parse", "--short", "HEAD"])
@@ -323,6 +345,7 @@ def main() -> None:
         commit = publish(days_with_reports, args.commit_message)
         if not args.no_db:
             update_database_commit(days_with_reports, commit)
+            commit = publish_memory_commit(days_with_reports)
 
     print("\n=== Resumen ===")
     print(json.dumps({"generated": generated, "published_commit": commit}, ensure_ascii=False, indent=2))
