@@ -230,6 +230,20 @@ def update_database_commit(days: list[date], commit: str) -> None:
         print(f"AVISO: no se pudo actualizar commit en PostgreSQL: {exc}")
 
 
+def push_origin_main_with_rebase_retry(*, attempts: int = 3) -> None:
+    for attempt in range(1, attempts + 1):
+        push = run(["git", "push", "origin", "main"], check=False)
+        print(push.stdout)
+        if push.returncode == 0:
+            return
+        if attempt == attempts:
+            raise RuntimeError("git push origin main falló después de reintentos.")
+        pull = run(["git", "pull", "--rebase", "origin", "main"], check=False)
+        print(pull.stdout)
+        if pull.returncode != 0:
+            raise RuntimeError("git pull --rebase falló durante reintento de push.")
+
+
 def publish(days: list[date], message: str | None) -> str:
     build_pages()
     add_paths = [
@@ -260,8 +274,7 @@ def publish(days: list[date], message: str | None) -> str:
     print(pull.stdout)
     if pull.returncode != 0:
         raise RuntimeError("git pull --rebase falló. Resolver conflictos y repetir push.")
-    push = run(["git", "push", "origin", "main"])
-    print(push.stdout)
+    push_origin_main_with_rebase_retry()
     rev = run(["git", "rev-parse", "--short", "HEAD"])
     return rev.stdout.strip()
 
@@ -281,8 +294,7 @@ def publish_memory_commit(days: list[date]) -> str:
     print(pull.stdout)
     if pull.returncode != 0:
         raise RuntimeError("git pull --rebase falló al publicar memoria.")
-    push = run(["git", "push", "origin", "main"])
-    print(push.stdout)
+    push_origin_main_with_rebase_retry()
     rev = run(["git", "rev-parse", "--short", "HEAD"])
     return rev.stdout.strip()
 
