@@ -15,6 +15,7 @@ from typing import Any
 BETANO_HOME = "https://www.betano.pe/"
 BETANO_DISCOVERY_URLS = [
     BETANO_HOME,
+    "https://www.betano.pe/sport/futbol/proximos-partidos-hoy/",
     "https://www.betano.pe/sport/futbol/",
 ]
 
