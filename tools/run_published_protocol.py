@@ -238,10 +238,39 @@ def push_origin_main_with_rebase_retry(*, attempts: int = 3) -> None:
             return
         if attempt == attempts:
             raise RuntimeError("git push origin main falló después de reintentos.")
+        stashed_generated_files = stash_generated_files_matching_origin()
         pull = run(["git", "pull", "--rebase", "origin", "main"], check=False)
         print(pull.stdout)
+        if stashed_generated_files:
+            drop = run(["git", "stash", "drop", "stash@{0}"], check=False)
+            print(drop.stdout)
         if pull.returncode != 0:
             raise RuntimeError("git pull --rebase falló durante reintento de push.")
+
+
+def stash_generated_files_matching_origin() -> bool:
+    """Stash generated page files that already match origin/main before rebasing.
+
+    GitHub Pages can append an automatic "[skip ci]" commit right after we push the
+    report. That leaves generated files such as index.html as local unstaged
+    changes relative to our still-old HEAD, even though they already match the
+    freshly fetched origin/main. Stashing only those matching generated files keeps
+    a rebase from failing while preserving unrelated user work.
+    """
+    run(["git", "fetch", "origin", "main"], check=False)
+    paths_to_stash: list[str] = []
+    for path in ("index.html", "latest.html"):
+        status = run(["git", "status", "--short", "--", path], check=False)
+        if not status.stdout.strip():
+            continue
+        diff = run(["git", "diff", "--quiet", "origin/main", "--", path], check=False)
+        if diff.returncode == 0:
+            paths_to_stash.append(path)
+    if not paths_to_stash:
+        return False
+    stash = run(["git", "stash", "push", "-m", "temp-generated-pages-before-rebase", "--", *paths_to_stash], check=False)
+    print(stash.stdout)
+    return "no local changes" not in stash.stdout.lower()
 
 
 def publish(days: list[date], message: str | None) -> str:

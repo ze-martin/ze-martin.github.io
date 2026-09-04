@@ -397,8 +397,10 @@ async def collect_event_links_from_page(page, *, max_scrolls: int = 9) -> list[d
         )
         for item in page_links:
             href = item.get("href") or ""
+            href = href.split("?", 1)[0].split("#", 1)[0]
             if href and href not in seen:
                 seen.add(href)
+                item["href"] = href
                 links.append(item)
         await page.mouse.wheel(0, random.randint(700, 1200))
         await page.wait_for_timeout(random.randint(800, 1400))
@@ -431,7 +433,7 @@ async def discover_event_links(page, matches: list[dict[str, str]]) -> dict[str,
     return found
 
 
-async def expand_visible_market_blocks(page, *, rounds: int = 4) -> None:
+async def expand_visible_market_blocks(page, *, rounds: int = 2) -> None:
     expanders = [
         "Mostrar más",
         "Ver más",
@@ -450,7 +452,7 @@ async def expand_visible_market_blocks(page, *, rounds: int = 4) -> None:
             break
 
 
-async def collect_body_snapshots(page, *, scrolls: int = 8) -> list[str]:
+async def collect_body_snapshots(page, *, scrolls: int = 3, expand: bool = True) -> list[str]:
     snapshots: list[str] = []
     try:
         await page.evaluate("window.scrollTo(0, 0)")
@@ -459,10 +461,11 @@ async def collect_body_snapshots(page, *, scrolls: int = 8) -> list[str]:
         pass
     for _ in range(scrolls):
         try:
-            await expand_visible_market_blocks(page, rounds=2)
+            if expand:
+                await expand_visible_market_blocks(page, rounds=1)
             snapshots.append(await page.locator("body").inner_text(timeout=15000))
             await page.mouse.wheel(0, random.randint(650, 1100))
-            await page.wait_for_timeout(random.randint(900, 1700))
+            await page.wait_for_timeout(random.randint(650, 1200))
         except Exception:
             pass
     return snapshots
@@ -475,7 +478,7 @@ async def scrape_event(page, url: str, home: str, away: str) -> dict[str, Any]:
 
     betano_home = aliases(home)[-1].title()
     betano_away = aliases(away)[-1].title()
-    text_snapshots = await collect_body_snapshots(page, scrolls=3)
+    text_snapshots = await collect_body_snapshots(page, scrolls=2)
 
     # Try tabs first; some market families only hydrate inside their category.
     for tab in [
@@ -488,13 +491,11 @@ async def scrape_event(page, url: str, home: str, away: str) -> dict[str, Any]:
         "Tarjetas",
         "Primer Tiempo",
         "1ª Mitad",
-        "Especiales",
-        "Bet Builder",
     ]:
         try:
             if await click_normalized(page, tab):
-                await page.wait_for_timeout(random.randint(1800, 3400))
-                text_snapshots.extend(await collect_body_snapshots(page, scrolls=3))
+                await page.wait_for_timeout(random.randint(1200, 2400))
+                text_snapshots.extend(await collect_body_snapshots(page, scrolls=2))
         except Exception:
             pass
 
@@ -536,8 +537,8 @@ async def scrape_event(page, url: str, home: str, away: str) -> dict[str, Any]:
     for label in labels:
         try:
             if await click_normalized(page, label, prefer_market=True):
-                await page.wait_for_timeout(random.randint(1200, 2400))
-                text_snapshots.extend(await collect_body_snapshots(page, scrolls=1))
+                await page.wait_for_timeout(random.randint(700, 1400))
+                text_snapshots.extend(await collect_body_snapshots(page, scrolls=1, expand=False))
         except Exception:
             pass
 
