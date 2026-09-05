@@ -92,6 +92,115 @@ def market_risk(key: str) -> str:
     return "riesgo propio del resultado final y variacion del modelo"
 
 
+def fair_odds(probability: float | None) -> float | None:
+    if probability is None or probability <= 0:
+        return None
+    return 1 / probability
+
+
+def market_line(key: str) -> float | None:
+    match = re_search_line(key)
+    if not match:
+        return None
+    try:
+        return float(match.replace("_", "."))
+    except ValueError:
+        return None
+
+
+def re_search_line(key: str) -> str | None:
+    import re
+
+    match = re.search(r"_(\d+_\d+)$", key)
+    return match.group(1) if match else None
+
+
+def market_priority(key: str) -> int:
+    line = market_line(key)
+    if key.startswith("TOTALS:OVER_1_5") or key.startswith("TOTALS:UNDER_3_5"):
+        return 10
+    if key.startswith(("DOUBLE_CHANCE", "DRAW_NO_BET")):
+        return 9
+    if key.startswith(("TOTALS:OVER_2_5", "TOTALS:UNDER_2_5", "BTTS")):
+        return 8
+    if key.startswith("1X2"):
+        return 7
+    if key.startswith("CORNERS_TOTALS"):
+        return 6
+    if key.startswith("FIRST_HALF_TOTALS") and line in {0.5, 1.5}:
+        return 5
+    if key.startswith(("TEAM_TOTAL", "CORNERS_HOME", "CORNERS_AWAY")):
+        return 4
+    if key.startswith("CARDS_TOTALS"):
+        return 3
+    if key.startswith(("CARDS_HOME", "CARDS_AWAY", "SHOTS_")):
+        return 2
+    return 1
+
+
+def source_penalty(source: str | None) -> float:
+    if source in {"current_tournament", "premium_current_tournament"}:
+        return 0.0
+    if source == "premium_mixed":
+        return 2.0
+    if source in {"recent_all_competitions", "premium_recent_all_competitions"}:
+        return 4.0
+    return 3.0
+
+
+def recommendation_score(key: str, probability: float, odds: float | None, ev: float | None, source: str | None) -> float:
+    score = probability * 100
+    score += market_priority(key) * 5
+    if ev is not None:
+        score += max(-12, min(ev * 18, 24))
+    score -= source_penalty(source)
+    fair = fair_odds(probability)
+    if odds is not None and fair is not None and odds / fair >= 1.75:
+        score -= 8
+    if key.startswith(("CARDS_", "SHOTS_")):
+        score -= 7
+    if key.startswith(("CORNERS_HOME", "CORNERS_AWAY", "TEAM_TOTAL")):
+        score -= 4
+    return round(score, 3)
+
+
+def recommendation_tier(key: str, probability: float, odds: float | None, ev: float | None, source: str | None) -> str:
+    priority = market_priority(key)
+    if odds is None:
+        return "Solo modelo"
+    if probability >= 0.72 and priority >= 8 and (ev is None or ev >= -0.03):
+        return "Seguro"
+    if ev is not None and ev >= 0.08 and probability >= 0.5:
+        return "Valor"
+    if key.startswith(("CARDS_", "SHOTS_")) or source in {"recent_all_competitions", "premium_recent_all_competitions"}:
+        return "Revisar"
+    if ev is not None and ev < -0.05:
+        return "Evitar"
+    return "Equilibrado"
+
+
+def value_warning(probability: float, odds: float | None) -> str:
+    fair = fair_odds(probability)
+    if odds is None or fair is None:
+        return ""
+    ratio = odds / fair
+    if ratio >= 1.75:
+        return "Cuota API muy superior a la cuota justa: revisar manualmente antes de apostar"
+    if ratio <= 0.85:
+        return "Cuota por debajo de la cuota justa: valor limitado"
+    return ""
+
+
+def actionable_market(row: dict) -> bool:
+    if row.get("odds") is None or row.get("ev") is None:
+        return False
+    if row.get("probability", 0) < 0.5:
+        return False
+    if row.get("recommendation_tier") == "Evitar":
+        return False
+    return market_priority(row.get("key", "")) >= 3
+
+
 def to_lima(iso_value: str) -> tuple[str, str, str]:
     kickoff = datetime.fromisoformat(iso_value.replace("Z", "+00:00"))
     if kickoff.tzinfo is None:
@@ -119,13 +228,17 @@ def build_market_rows(probabilities: dict[str, float], odds: dict, sources: dict
             ev = expected_value(probability, offered_odds)
             status = "EV positivo" if ev >= 0.02 else "EV negativo"
         source = sources.get(key)
+        fair = fair_odds(probability)
         rows.append(
             {
                 "key": key,
                 "market": market_name(key),
                 "probability": round(probability, 4),
+                "fair_odds": round(fair, 3) if fair is not None else None,
                 "odds": round(offered_odds, 3) if offered_odds is not None else None,
                 "ev": round(ev, 4) if ev is not None else None,
+                "edge_api": round(offered_odds - fair, 4) if offered_odds is not None and fair is not None else None,
+                "value_ratio_api": round(offered_odds / fair, 4) if offered_odds is not None and fair is not None else None,
                 "status": status,
                 "confidence": confidence(probability),
                 "bookmaker": bookmaker,
@@ -133,6 +246,10 @@ def build_market_rows(probabilities: dict[str, float], odds: dict, sources: dict
                 "source_key": source,
                 "reason": market_reason(key, source),
                 "risk": market_risk(key),
+                "market_priority": market_priority(key),
+                "recommendation_score": recommendation_score(key, probability, offered_odds, ev, source),
+                "recommendation_tier": recommendation_tier(key, probability, offered_odds, ev, source),
+                "value_warning": value_warning(probability, offered_odds),
             }
         )
     return rows
@@ -233,9 +350,20 @@ def generate(from_date: date, to_date: date, leagues: list[str], date_lima_filte
                 probability_sources,
             )
             result["all_markets"] = result["probability_markets"]
-            positive = [row for row in result["probability_markets"] if row["ev"] is not None and row["ev"] >= 0.02]
+            positive = [
+                row
+                for row in result["probability_markets"]
+                if row["ev"] is not None and row["ev"] >= 0.02 and actionable_market(row)
+            ]
             if positive:
-                positive.sort(key=lambda row: (row["probability"], row["ev"]), reverse=True)
+                positive.sort(
+                    key=lambda row: (
+                        row.get("recommendation_score") or 0,
+                        row["probability"],
+                        row["ev"],
+                    ),
+                    reverse=True,
+                )
                 result["recommended_pick"] = positive[0]
             if note_parts:
                 result["note"] = "; ".join(note_parts)

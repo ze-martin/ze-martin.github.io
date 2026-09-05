@@ -338,8 +338,10 @@ def publish(days: list[date], message: str | None, scope: str) -> str:
         "index.html",
         "latest.html",
         "data\\protocol_memory.sqlite",
+        "db\\local_protocol_store.py",
         "tools\\enrich_protocol_with_betano.py",
         "tools\\export_protocol_html.py",
+        "tools\\generate_protocol_probabilities.py",
         "tools\\run_published_protocol.py",
     ]
     for day in days:

@@ -58,9 +58,34 @@ class LocalProtocolStore:
             )
             conn.execute(
                 """
+                CREATE TABLE IF NOT EXISTS protocol_report_variant (
+                    report_key TEXT PRIMARY KEY,
+                    report_date TEXT NOT NULL,
+                    report_scope TEXT NOT NULL,
+                    source_json TEXT,
+                    enriched_json TEXT,
+                    html_path TEXT,
+                    csv_path TEXT,
+                    public_html_url TEXT,
+                    public_csv_url TEXT,
+                    matches_count INTEGER NOT NULL DEFAULT 0,
+                    markets_count INTEGER NOT NULL DEFAULT 0,
+                    api_odds_count INTEGER NOT NULL DEFAULT 0,
+                    betano_odds_count INTEGER NOT NULL DEFAULT 0,
+                    ev_api_positive_count INTEGER NOT NULL DEFAULT 0,
+                    ev_betano_positive_count INTEGER NOT NULL DEFAULT 0,
+                    published_commit TEXT,
+                    raw_summary TEXT NOT NULL DEFAULT '{}',
+                    updated_at TEXT NOT NULL
+                );
+                """
+            )
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS protocol_market (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     report_date TEXT NOT NULL,
+                    report_scope TEXT NOT NULL DEFAULT 'legacy',
                     match_id TEXT,
                     match_name TEXT NOT NULL,
                     kickoff_lima TEXT,
@@ -79,6 +104,8 @@ class LocalProtocolStore:
                 """
             )
             conn.execute("CREATE INDEX IF NOT EXISTS idx_protocol_market_date ON protocol_market(report_date);")
+            self._ensure_column(conn, "protocol_market", "report_scope", "TEXT NOT NULL DEFAULT 'legacy'")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_protocol_market_scope ON protocol_market(report_scope);")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_protocol_market_match ON protocol_market(match_name);")
 
     def seed_agent_memory(self) -> None:
@@ -133,6 +160,8 @@ class LocalProtocolStore:
         stats = self.protocol_stats(protocol_json)
         now = datetime.now(timezone.utc).isoformat()
         day = report_date.isoformat()
+        scope = self._report_scope(report_date, html_path)
+        report_key = f"{day}:{scope}"
         with self.connect() as conn:
             conn.execute(
                 """
@@ -179,20 +208,69 @@ class LocalProtocolStore:
                     now,
                 ),
             )
-            conn.execute("DELETE FROM protocol_market WHERE report_date = ?;", (day,))
+            conn.execute(
+                """
+                INSERT INTO protocol_report_variant (
+                    report_key, report_date, report_scope, source_json, enriched_json,
+                    html_path, csv_path, public_html_url, public_csv_url, matches_count,
+                    markets_count, api_odds_count, betano_odds_count,
+                    ev_api_positive_count, ev_betano_positive_count, published_commit,
+                    raw_summary, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(report_key) DO UPDATE SET
+                    source_json = excluded.source_json,
+                    enriched_json = excluded.enriched_json,
+                    html_path = excluded.html_path,
+                    csv_path = excluded.csv_path,
+                    public_html_url = excluded.public_html_url,
+                    public_csv_url = excluded.public_csv_url,
+                    matches_count = excluded.matches_count,
+                    markets_count = excluded.markets_count,
+                    api_odds_count = excluded.api_odds_count,
+                    betano_odds_count = excluded.betano_odds_count,
+                    ev_api_positive_count = excluded.ev_api_positive_count,
+                    ev_betano_positive_count = excluded.ev_betano_positive_count,
+                    published_commit = COALESCE(excluded.published_commit, protocol_report_variant.published_commit),
+                    raw_summary = excluded.raw_summary,
+                    updated_at = excluded.updated_at;
+                """,
+                (
+                    report_key,
+                    day,
+                    scope,
+                    str(source_json) if source_json else None,
+                    str(enriched_json) if enriched_json else None,
+                    str(html_path) if html_path else None,
+                    str(csv_path) if csv_path else None,
+                    public_html_url,
+                    public_csv_url,
+                    stats["matches"],
+                    stats["markets"],
+                    stats["api_odds"],
+                    stats["betano_odds"],
+                    stats["ev_api_positive"],
+                    stats["ev_betano_positive"],
+                    published_commit,
+                    json.dumps(stats, ensure_ascii=False),
+                    now,
+                ),
+            )
+            conn.execute("DELETE FROM protocol_market WHERE report_date = ? AND report_scope = ?;", (day, scope))
             for result in protocol_json.get("results", []):
                 for market in result.get("all_markets", []):
                     conn.execute(
                         """
                         INSERT INTO protocol_market (
-                            report_date, match_id, match_name, kickoff_lima, market_key, market_name,
+                            report_date, report_scope, match_id, match_name, kickoff_lima, market_key, market_name,
                             probability, bookmaker_api, odds_api, ev_api, bookmaker_betano,
                             odds_betano, ev_betano, raw_market, updated_at
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
                         """,
                         (
                             day,
+                            scope,
                             str(result.get("match_id") or ""),
                             result.get("match") or "",
                             result.get("kickoff_lima") or "",
@@ -211,10 +289,19 @@ class LocalProtocolStore:
                     )
         return stats
 
+    def _ensure_column(self, conn: sqlite3.Connection, table: str, column: str, definition: str) -> None:
+        columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table});").fetchall()}
+        if column not in columns:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition};")
+
     def update_protocol_report_commit(self, report_date: date, commit: str) -> None:
         with self.connect() as conn:
             conn.execute(
                 "UPDATE protocol_report SET published_commit = ?, updated_at = ? WHERE report_date = ?;",
+                (commit, datetime.now(timezone.utc).isoformat(), report_date.isoformat()),
+            )
+            conn.execute(
+                "UPDATE protocol_report_variant SET published_commit = ?, updated_at = ? WHERE report_date = ?;",
                 (commit, datetime.now(timezone.utc).isoformat(), report_date.isoformat()),
             )
 
@@ -243,3 +330,17 @@ class LocalProtocolStore:
                 1 for market in markets if market.get("ev_betano") is not None and market.get("ev_betano") > 0
             ),
         }
+
+    def _report_scope(self, report_date: date, html_path: str | Path | None) -> str:
+        if not html_path:
+            return "legacy"
+        stem = Path(html_path).stem
+        compact = report_date.strftime("%Y%m%d")
+        prefix = f"protocolo_{compact}_"
+        suffix = "_pc"
+        if stem == f"protocolo_{compact}_pc":
+            return "legacy"
+        if stem.startswith(prefix) and stem.endswith(suffix):
+            scope = stem[len(prefix) : -len(suffix)].strip("_")
+            return scope or "legacy"
+        return "custom"
