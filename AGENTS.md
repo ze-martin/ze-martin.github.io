@@ -100,6 +100,12 @@ Para no repetir pasos manuales, usar:
 python tools\run_published_protocol.py --dates YYYY-MM-DD,YYYY-MM-DD --leagues 1 --publish
 ```
 
+Para el protocolo completo de las ligas/copas que se vienen siguiendo, usar alcance separado para no sobrescribir reportes de una sola liga:
+
+```powershell
+python tools\run_published_protocol.py --dates YYYY-MM-DD,YYYY-MM-DD --leagues 39,281,140,135,61,48,13,11,78,71,73,130,81 --report-scope full --publish
+```
+
 Sin `--publish`, solo genera archivos locales.
 
 También puede ejecutarse desde el entrypoint principal:
@@ -115,6 +121,23 @@ Este comando debe:
 - exportar HTML/CSV;
 - guardar en PostgreSQL si está disponible;
 - publicar en GitHub Pages si se usa `--publish`.
+- separar reportes por `report_scope` (`full`, `world_cup`, `mls`, etc.) para que una actualización no pise otra de la misma fecha.
+
+## Mejoras obligatorias del protocolo
+
+El protocolo publicado debe usar el scoring enriquecido, no solo probabilidad simple:
+
+- calcular `cuota_justa` (`fair_odds`) desde la probabilidad;
+- calcular diferencia y ratio contra cuota API-Football;
+- calcular diferencia y ratio contra cuota Betano cuando exista cuota equivalente;
+- clasificar cada mercado con `perfil_pick` (`Seguro`, `Valor` o `Solo modelo`);
+- priorizar mercados accionables con `market_priority`;
+- agregar `score` / `combined_recommendation_score` para ordenar recomendaciones;
+- marcar `alerta_valor` cuando el valor dependa demasiado de una cuota sospechosamente alta;
+- marcar `cobertura_betano` por partido (`Betano mapeado`, `Betano no expuesto`, etc.);
+- mostrar una sección HTML de `Vista combinada sugerida` con 3 o 4 picks por partido cuando haya candidatos suficientes.
+
+En Betano se deben validar rangos razonables de líneas antes de mapear cuotas. No aceptar líneas fuera de rango que contaminen mercados, por ejemplo goles totales `+8.5` como si fuera un mercado normal prepartido.
 
 ## Salidas oficiales
 
@@ -124,6 +147,10 @@ Los reportes publicados viven en:
 - CSV local: `outputs/protocolo_YYYYMMDD_pc_todos_los_mercados.csv`
 - HTML público raíz: `reports/protocolo_YYYYMMDD_pc.html`
 - CSV público raíz: `reports/protocolo_YYYYMMDD_pc_todos_los_mercados.csv`
+- HTML local full: `outputs/protocolo_YYYYMMDD_full_pc.html`
+- CSV local full: `outputs/protocolo_YYYYMMDD_full_pc_todos_los_mercados.csv`
+- HTML público full: `reports/protocolo_YYYYMMDD_full_pc.html`
+- CSV público full: `reports/protocolo_YYYYMMDD_full_pc_todos_los_mercados.csv`
 - Último reporte público: `latest.html`
 - Índice público: `index.html`
 - URL pública: `https://ze-martin.github.io/reports/protocolo_YYYYMMDD_pc.html`
@@ -145,6 +172,7 @@ Tablas principales:
 
 - `agent_memory`: guarda la memoria operativa del flujo publicado bajo la clave `published_protocol_workflow`.
 - `protocol_report`: guarda un registro por fecha con rutas locales, URLs públicas, commit publicado y conteos.
+- `protocol_report_variant`: guarda variantes por fecha y `report_scope`, por ejemplo `2026-09-05:full`.
 - `match`, `market`, `probability`, `odds`, `ev`: guardan partidos, mercados, probabilidades, cuotas y EV por casa.
 
 Cada vez que se ejecute `tools/run_published_protocol.py`, debe intentar:
