@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import subprocess
 import sys
+import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -21,6 +23,24 @@ OUTPUTS = ROOT / "outputs"
 REPORTS = ROOT / "reports"
 SITE = ROOT / "site"
 PUBLIC_BASE = "https://ze-martin.github.io/reports"
+FULL_PROTOCOL_LEAGUES = {"39", "281", "140", "135", "61", "48", "13", "11", "78", "71", "73", "130", "81"}
+SINGLE_LEAGUE_SCOPES = {
+    "1": "world_cup",
+    "11": "sudamericana",
+    "13": "libertadores",
+    "39": "premier",
+    "48": "efl_cup",
+    "61": "ligue_1",
+    "71": "serie_a_brasil",
+    "73": "copa_brasil",
+    "78": "bundesliga",
+    "81": "dfb_pokal",
+    "130": "copa_argentina",
+    "135": "serie_a_italia",
+    "140": "la_liga",
+    "253": "mls",
+    "281": "liga_1_peru",
+}
 
 
 def run(command: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -66,11 +86,38 @@ def load_matches(path: Path) -> int:
     return int(data.get("matches") or len(data.get("results", [])))
 
 
-def generate_base(day: date, leagues: str) -> Path:
+def slugify(value: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_")
+    return slug or "custom"
+
+
+def resolve_report_scope(leagues: str, requested_scope: str | None) -> str:
+    if requested_scope and requested_scope.lower() not in {"auto", "legacy"}:
+        return slugify(requested_scope)
+    if requested_scope and requested_scope.lower() == "legacy":
+        return ""
+    ids = {item.strip() for item in leagues.split(",") if item.strip()}
+    if ids == FULL_PROTOCOL_LEAGUES:
+        return "full"
+    if len(ids) == 1:
+        return SINGLE_LEAGUE_SCOPES.get(next(iter(ids)), f"league_{next(iter(ids))}")
+    return "custom"
+
+
+def protocol_prefix(day: date, scope: str) -> str:
+    compact = day.strftime("%Y%m%d")
+    return f"protocol_world_cup_{compact}_{scope}_full" if scope else f"protocol_world_cup_{compact}_full"
+
+
+def report_prefix(day: date, scope: str) -> str:
+    compact = day.strftime("%Y%m%d")
+    return f"protocolo_{compact}_{scope}_pc" if scope else f"protocolo_{compact}_pc"
+
+
+def generate_base(day: date, leagues: str, scope: str) -> Path:
     day_text = day.isoformat()
     next_day = (day + timedelta(days=1)).isoformat()
-    compact = day.strftime("%Y%m%d")
-    prefix = f"protocol_world_cup_{compact}_full"
+    prefix = protocol_prefix(day, scope)
     result = run(
         [
             sys.executable,
@@ -93,9 +140,8 @@ def generate_base(day: date, leagues: str) -> Path:
     return find_latest_json(prefix)
 
 
-def enrich_betano(source: Path, day: date, python_bin: str | None) -> Path:
-    compact = day.strftime("%Y%m%d")
-    output = RUNS / f"protocol_world_cup_{compact}_full_betano.json"
+def enrich_betano(source: Path, day: date, python_bin: str | None, scope: str) -> Path:
+    output = RUNS / f"{protocol_prefix(day, scope)}_betano.json"
     executable = python_bin or sys.executable
     result = run(
         [
@@ -111,8 +157,8 @@ def enrich_betano(source: Path, day: date, python_bin: str | None) -> Path:
     return output
 
 
-def export_report(source: Path, day: date) -> tuple[Path, Path]:
-    compact = day.strftime("%Y%m%d")
+def export_report(source: Path, day: date, scope: str) -> tuple[Path, Path]:
+    prefix = report_prefix(day, scope)
     result = run(
         [
             sys.executable,
@@ -122,14 +168,14 @@ def export_report(source: Path, day: date) -> tuple[Path, Path]:
             "--date",
             day.isoformat(),
             "--prefix",
-            f"protocolo_{compact}_pc",
+            prefix,
             "--output-dir",
             "outputs",
         ]
     )
     print(result.stdout)
-    html = OUTPUTS / f"protocolo_{compact}_pc.html"
-    csv = OUTPUTS / f"protocolo_{compact}_pc_todos_los_mercados.csv"
+    html = OUTPUTS / f"{prefix}.html"
+    csv = OUTPUTS / f"{prefix}_todos_los_mercados.csv"
     return html, csv
 
 
@@ -159,10 +205,9 @@ def save_run_to_database(
     csv_path: Path,
     commit: str | None = None,
 ) -> None:
-    compact = day.strftime("%Y%m%d")
     data = json.loads(enriched_json.read_text(encoding="utf-8"))
-    public_html_url = f"{PUBLIC_BASE}/protocolo_{compact}_pc.html"
-    public_csv_url = f"{PUBLIC_BASE}/protocolo_{compact}_pc_todos_los_mercados.csv"
+    public_html_url = f"{PUBLIC_BASE}/{html_path.name}"
+    public_csv_url = f"{PUBLIC_BASE}/{csv_path.name}"
     try:
         from db.local_protocol_store import LocalProtocolStore
 
@@ -239,8 +284,7 @@ def push_origin_main_with_rebase_retry(*, attempts: int = 3) -> None:
         if attempt == attempts:
             raise RuntimeError("git push origin main falló después de reintentos.")
         stashed_generated_files = stash_generated_files_matching_origin()
-        pull = run(["git", "pull", "--rebase", "origin", "main"], check=False)
-        print(pull.stdout)
+        pull = retry_rebase_pull()
         if stashed_generated_files:
             drop = run(["git", "stash", "drop", "stash@{0}"], check=False)
             print(drop.stdout)
@@ -273,7 +317,22 @@ def stash_generated_files_matching_origin() -> bool:
     return "no local changes" not in stash.stdout.lower()
 
 
-def publish(days: list[date], message: str | None) -> str:
+def retry_rebase_pull(*, attempts: int = 3) -> subprocess.CompletedProcess[str]:
+    last_pull: subprocess.CompletedProcess[str] | None = None
+    for pull_attempt in range(1, attempts + 1):
+        last_pull = run(["git", "pull", "--rebase", "origin", "main"], check=False)
+        print(last_pull.stdout)
+        if last_pull.returncode == 0:
+            return last_pull
+        if "protocol_memory.sqlite" in last_pull.stdout.lower() or "could not detach head" in last_pull.stdout.lower():
+            time.sleep(3 * pull_attempt)
+            continue
+        return last_pull
+    assert last_pull is not None
+    return last_pull
+
+
+def publish(days: list[date], message: str | None, scope: str) -> str:
     build_pages()
     add_paths = [
         "index.html",
@@ -284,13 +343,13 @@ def publish(days: list[date], message: str | None) -> str:
         "tools\\run_published_protocol.py",
     ]
     for day in days:
-        compact = day.strftime("%Y%m%d")
+        prefix = report_prefix(day, scope)
         add_paths.extend(
             [
-                f"outputs\\protocolo_{compact}_pc.html",
-                f"outputs\\protocolo_{compact}_pc_todos_los_mercados.csv",
-                f"reports\\protocolo_{compact}_pc.html",
-                f"reports\\protocolo_{compact}_pc_todos_los_mercados.csv",
+                f"outputs\\{prefix}.html",
+                f"outputs\\{prefix}_todos_los_mercados.csv",
+                f"reports\\{prefix}.html",
+                f"reports\\{prefix}_todos_los_mercados.csv",
             ]
         )
     run(["git", "add", *add_paths])
@@ -299,8 +358,7 @@ def publish(days: list[date], message: str | None) -> str:
     print(commit.stdout)
     if commit.returncode != 0 and "nothing to commit" not in commit.stdout.lower():
         raise RuntimeError("No se pudo crear commit")
-    pull = run(["git", "pull", "--rebase", "origin", "main"], check=False)
-    print(pull.stdout)
+    pull = retry_rebase_pull()
     if pull.returncode != 0:
         raise RuntimeError("git pull --rebase falló. Resolver conflictos y repetir push.")
     push_origin_main_with_rebase_retry()
@@ -319,8 +377,7 @@ def publish_memory_commit(days: list[date]) -> str:
     print(commit.stdout)
     if commit.returncode != 0 and "nothing to commit" not in commit.stdout.lower():
         raise RuntimeError("No se pudo crear commit de memoria")
-    pull = run(["git", "pull", "--rebase", "origin", "main"], check=False)
-    print(pull.stdout)
+    pull = retry_rebase_pull()
     if pull.returncode != 0:
         raise RuntimeError("git pull --rebase falló al publicar memoria.")
     push_origin_main_with_rebase_retry()
@@ -339,6 +396,11 @@ def main() -> None:
     parser.add_argument("--publish", action="store_true", help="Publica en GitHub Pages con commit/push")
     parser.add_argument("--no-db", action="store_true", help="No guarda memoria ni resultados en PostgreSQL")
     parser.add_argument("--commit-message", help="Mensaje de commit si se usa --publish")
+    parser.add_argument(
+        "--report-scope",
+        default="auto",
+        help="Sufijo del reporte para no sobrescribir fechas. auto/full/mls/etc. Usa legacy para nombres antiguos.",
+    )
     args = parser.parse_args()
 
     if args.dates:
@@ -347,20 +409,22 @@ def main() -> None:
         start = parse_date(args.from_date)
         end = parse_date(args.to_date or args.from_date)
         days = date_range(start, end)
+    scope = resolve_report_scope(args.leagues, args.report_scope)
+    print(f"report_scope={scope or 'legacy'}")
 
     generated: list[dict[str, str | int]] = []
     days_with_reports: list[date] = []
 
     for day in days:
         print(f"\n=== Protocolo {day.isoformat()} ===")
-        base_json = generate_base(day, args.leagues)
+        base_json = generate_base(day, args.leagues, scope)
         matches = load_matches(base_json)
         if matches == 0:
             print(f"Sin partidos para {day.isoformat()}; no se genera HTML vacío.")
             generated.append({"date": day.isoformat(), "matches": 0, "base_json": str(base_json)})
             continue
-        enriched_json = enrich_betano(base_json, day, args.betano_python)
-        html_path, csv_path = export_report(enriched_json, day)
+        enriched_json = enrich_betano(base_json, day, args.betano_python, scope)
+        html_path, csv_path = export_report(enriched_json, day, scope)
         validate_html(html_path)
         if not args.no_db:
             save_run_to_database(
@@ -383,7 +447,7 @@ def main() -> None:
 
     commit = ""
     if args.publish and days_with_reports:
-        commit = publish(days_with_reports, args.commit_message)
+        commit = publish(days_with_reports, args.commit_message, scope)
         if not args.no_db:
             update_database_commit(days_with_reports, commit)
             commit = publish_memory_commit(days_with_reports)

@@ -108,10 +108,14 @@ def build_rows(data: dict) -> tuple[list[dict], list[dict], dict[str, list[dict]
                 "partido": result.get("match", ""),
                 "pick": clean(rec.get("market")),
                 "prob": pct(rec.get("probability")),
+                "cuota_justa": money(rec.get("fair_odds")),
                 "cuota_api": money(numeric(rec, "odds_api", "odds")),
                 "ev_api": money(numeric(rec, "ev_api", "ev")),
                 "cuota_betano": money(rec.get("odds_betano")),
                 "ev_betano": money(rec.get("ev_betano")),
+                "score": money(rec.get("combined_recommendation_score") or rec.get("recommendation_score")),
+                "perfil": rec.get("recommendation_tier") or "",
+                "cobertura_betano": result.get("betano_coverage_status") or "",
                 "mercados": len(markets),
                 "con_api": len(with_api_odds),
                 "con_betano": len(with_betano_odds),
@@ -123,7 +127,11 @@ def build_rows(data: dict) -> tuple[list[dict], list[dict], dict[str, list[dict]
         top = [m for m in markets if numeric(m, "ev_api", "ev") is not None and numeric(m, "ev_api", "ev") > 0]
         top_ev[result.get("match", "")] = sorted(
             top,
-            key=lambda m: ((m.get("probability") or 0), (numeric(m, "ev_api", "ev") or 0)),
+            key=lambda m: (
+                (m.get("combined_recommendation_score") or m.get("recommendation_score") or 0),
+                (m.get("probability") or 0),
+                (numeric(m, "ev_api", "ev") or 0),
+            ),
             reverse=True,
         )
 
@@ -142,14 +150,25 @@ def build_rows(data: dict) -> tuple[list[dict], list[dict], dict[str, list[dict]
                     "key": market.get("key") or "",
                     "probabilidad": pct(market.get("probability")),
                     "prob_num": dec(market.get("probability")),
+                    "cuota_justa": money(market.get("fair_odds")),
                     "cuota_api": money(api_odds),
                     "ev_api": money(api_ev),
                     "ev_api_num": dec(api_ev),
+                    "dif_api_vs_justa": money(market.get("edge_api")),
+                    "ratio_api_vs_justa": money(market.get("value_ratio_api")),
                     "cuota_betano": money(market.get("odds_betano")),
                     "ev_betano": money(market.get("ev_betano")),
                     "ev_betano_num": dec(market.get("ev_betano")),
+                    "dif_betano_vs_justa": money(market.get("edge_betano")),
+                    "ratio_betano_vs_justa": money(market.get("value_ratio_betano")),
                     "estado_api": market.get("status") or "",
                     "estado_betano": market.get("status_betano") or "",
+                    "perfil_pick": market.get("recommendation_tier") or "",
+                    "prioridad_mercado": market.get("market_priority") or "",
+                    "score": money(market.get("combined_recommendation_score") or market.get("recommendation_score")),
+                    "score_num": dec(market.get("combined_recommendation_score") or market.get("recommendation_score")),
+                    "alerta_valor": market.get("value_warning") or "",
+                    "cobertura_betano": result.get("betano_coverage_status") or "",
                     "confianza": market.get("confidence") or "",
                     "fuente": market.get("source") or "",
                     "razon": market.get("reason") or "",
@@ -184,14 +203,25 @@ def write_csv(rows: list[dict], path: Path) -> None:
         "key",
         "probabilidad",
         "prob_num",
+        "cuota_justa",
         "cuota_api",
         "ev_api",
         "ev_api_num",
+        "dif_api_vs_justa",
+        "ratio_api_vs_justa",
         "cuota_betano",
         "ev_betano",
         "ev_betano_num",
+        "dif_betano_vs_justa",
+        "ratio_betano_vs_justa",
         "estado_api",
         "estado_betano",
+        "perfil_pick",
+        "prioridad_mercado",
+        "score",
+        "score_num",
+        "alerta_valor",
+        "cobertura_betano",
         "confianza",
         "fuente",
         "razon",
@@ -216,16 +246,73 @@ def ev_class(row: dict) -> str:
     return "noev"
 
 
+def as_number(value: Any, default: float = -999.0) -> float:
+    try:
+        if value in ("", None):
+            return default
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def build_combo_rows(rows: list[dict]) -> list[dict]:
+    grouped: dict[str, list[dict]] = {}
+    for row in rows:
+        if not row.get("cuota_api") and not row.get("cuota_betano"):
+            continue
+        if row.get("perfil_pick") == "Evitar":
+            continue
+        if as_number(row.get("prob_num"), 0) < 0.55:
+            continue
+        grouped.setdefault(row["partido"], []).append(row)
+
+    combo: list[dict] = []
+    for match, items in grouped.items():
+        selected = sorted(
+            items,
+            key=lambda row: (
+                as_number(row.get("score_num")),
+                as_number(row.get("prob_num")),
+                as_number(row.get("ev_betano_num")),
+                as_number(row.get("ev_api_num")),
+            ),
+            reverse=True,
+        )[:4]
+        for idx, row in enumerate(selected, 1):
+            combo.append(
+                {
+                    "partido": match,
+                    "n": idx,
+                    "pick": row.get("pick", ""),
+                    "perfil": row.get("perfil_pick", ""),
+                    "probabilidad": row.get("probabilidad", ""),
+                    "cuota_justa": row.get("cuota_justa", ""),
+                    "bookmaker_api": row.get("bookmaker_api", ""),
+                    "cuota_api": row.get("cuota_api", ""),
+                    "ev_api": row.get("ev_api", ""),
+                    "cuota_betano": row.get("cuota_betano", ""),
+                    "ev_betano": row.get("ev_betano", ""),
+                    "score": row.get("score", ""),
+                    "alerta_valor": row.get("alerta_valor", ""),
+                }
+            )
+    return combo
+
+
 def write_html(rows: list[dict], summary: list[dict], src: Path, title: str, path: Path) -> None:
     summary_keys = [
         "hora",
         "partido",
         "pick",
         "prob",
+        "cuota_justa",
         "cuota_api",
         "ev_api",
         "cuota_betano",
         "ev_betano",
+        "score",
+        "perfil",
+        "cobertura_betano",
         "mercados",
         "con_api",
         "con_betano",
@@ -235,6 +322,30 @@ def write_html(rows: list[dict], summary: list[dict], src: Path, title: str, pat
     summary_rows = "\n".join(
         "<tr>" + "".join(f"<td>{html.escape(str(item[key]))}</td>" for key in summary_keys) + "</tr>"
         for item in summary
+    )
+    combo = build_combo_rows(rows)
+    combo_rows = "\n".join(
+        "<tr>"
+        + "".join(
+            f"<td>{html.escape(str(item[key]))}</td>"
+            for key in [
+                "partido",
+                "n",
+                "pick",
+                "perfil",
+                "probabilidad",
+                "cuota_justa",
+                "bookmaker_api",
+                "cuota_api",
+                "ev_api",
+                "cuota_betano",
+                "ev_betano",
+                "score",
+                "alerta_valor",
+            ]
+        )
+        + "</tr>"
+        for item in combo
     )
     options = "\n".join(
         f'<option value="{html.escape(item["partido"])}">{html.escape(item["partido"])}</option>'
@@ -249,14 +360,23 @@ def write_html(rows: list[dict], summary: list[dict], src: Path, title: str, pat
             row["partido"],
             row["pick"],
             row["probabilidad"],
+            row["cuota_justa"],
+            row["score"],
+            row["perfil_pick"],
             row["bookmaker_api"],
             row["cuota_api"],
             row["ev_api"],
+            row["dif_api_vs_justa"],
+            row["ratio_api_vs_justa"],
             row["bookmaker_betano"],
             row["cuota_betano"],
             row["ev_betano"],
+            row["dif_betano_vs_justa"],
+            row["ratio_betano_vs_justa"],
             row["estado_api"],
             row["estado_betano"],
+            row["cobertura_betano"],
+            row["alerta_valor"],
             row["confianza"],
             row["fuente"],
             row["riesgo"],
@@ -310,11 +430,21 @@ th{{position:sticky;top:0;background:#18233a;z-index:2;color:#cfe0ff;cursor:poin
       <div class="kpi"><span class="small">Con cuota API-Football</span><b>{sum(1 for row in rows if row["cuota_api"])}</b></div>
       <div class="kpi"><span class="small">Con cuota Betano</span><b>{sum(1 for row in rows if row["cuota_betano"])}</b></div>
     </div>
-    <p class="small"><span class="badge">Nota</span> API-Football puede devolver distintos bookmakers; la columna <b>Book API-Football</b> muestra la casa real disponible para cada mercado. Betano se scrapea en vivo desde betano.pe y puede cambiar.</p>
+    <p class="small"><span class="badge">Nota</span> API-Football puede devolver distintos bookmakers; la columna <b>Book API-Football</b> muestra la casa real disponible para cada mercado. <b>Cuota justa</b> es 1/probabilidad del modelo. Betano se scrapea en vivo desde betano.pe y puede cambiar.</p>
     <div class="tablewrap" style="max-height:none;margin-top:14px">
       <table id="summary">
-        <thead><tr><th>Hora</th><th>Partido</th><th>Pick principal</th><th>Prob</th><th>Cuota API-Football</th><th>EV API-Football</th><th>Cuota Betano</th><th>EV Betano</th><th>Mercados</th><th>Con API-Football</th><th>Con Betano</th><th>EV+ API-Football</th><th>EV+ Betano</th></tr></thead>
+        <thead><tr><th>Hora</th><th>Partido</th><th>Pick principal</th><th>Prob</th><th>Cuota justa</th><th>Cuota API-Football</th><th>EV API-Football</th><th>Cuota Betano</th><th>EV Betano</th><th>Score</th><th>Perfil</th><th>Cobertura Betano</th><th>Mercados</th><th>Con API-Football</th><th>Con Betano</th><th>EV+ API-Football</th><th>EV+ Betano</th></tr></thead>
         <tbody>{summary_rows}</tbody>
+      </table>
+    </div>
+  </section>
+  <section class="card">
+    <h2>Vista combinada sugerida</h2>
+    <p class="small">Selecciona 3 o 4 picks por partido desde esta vista. El score premia mercados más apostables, probabilidad, EV y confirmación Betano; penaliza tiros/tarjetas y cuotas API demasiado alejadas de la cuota justa.</p>
+    <div class="tablewrap" style="max-height:55vh">
+      <table id="combo">
+        <thead><tr><th>Partido</th><th>#</th><th>Pick</th><th>Perfil</th><th>Prob</th><th>Cuota justa</th><th>Book API-Football</th><th>Cuota API-Football</th><th>EV API-Football</th><th>Cuota Betano</th><th>EV Betano</th><th>Score</th><th>Alerta</th></tr></thead>
+        <tbody>{combo_rows}</tbody>
       </table>
     </div>
   </section>
@@ -323,13 +453,13 @@ th{{position:sticky;top:0;background:#18233a;z-index:2;color:#cfe0ff;cursor:poin
     <div class="controls">
       <div><label>Buscar</label><input id="q" placeholder="Ej: corners, goles +1.5, Argentina"></div>
       <div><label>Partido</label><select id="match"><option value="">Todos</option>{options}</select></div>
-      <div><label>Filtro</label><select id="filter"><option value="all">Todos</option><option value="evpos">EV positivo en alguna casa</option><option value="api">Con cuota API-Football</option><option value="betano">Con cuota Betano</option><option value="no_betano">Sin cuota Betano</option></select></div>
+      <div><label>Filtro</label><select id="filter"><option value="all">Todos</option><option value="evpos">EV positivo en alguna casa</option><option value="api">Con cuota API-Football</option><option value="betano">Con cuota Betano</option><option value="no_betano">Sin cuota Betano</option><option value="seguro">Perfil Seguro</option><option value="valor">Perfil Valor</option></select></div>
       <div><label>Acción</label><button onclick="resetFilters()">Limpiar filtros</button></div>
     </div>
     <p class="small"><span class="badge">Tip</span> Click en encabezados para ordenar. Verde = EV positivo en API-Football o Betano.</p>
     <div class="tablewrap">
       <table id="markets">
-        <thead><tr><th>#</th><th>Hora</th><th>Partido</th><th>Pick</th><th>Prob</th><th>Book API-Football</th><th>Cuota API-Football</th><th>EV API-Football</th><th>Book Betano</th><th>Cuota Betano</th><th>EV Betano</th><th>Estado API-Football</th><th>Estado Betano</th><th>Confianza</th><th>Fuente</th><th>Riesgo</th></tr></thead>
+        <thead><tr><th>#</th><th>Hora</th><th>Partido</th><th>Pick</th><th>Prob</th><th>Cuota justa</th><th>Score</th><th>Perfil</th><th>Book API-Football</th><th>Cuota API-Football</th><th>EV API-Football</th><th>Dif API-justa</th><th>Ratio API/justa</th><th>Book Betano</th><th>Cuota Betano</th><th>EV Betano</th><th>Dif Betano-justa</th><th>Ratio Betano/justa</th><th>Estado API-Football</th><th>Estado Betano</th><th>Cobertura Betano</th><th>Alerta</th><th>Confianza</th><th>Fuente</th><th>Riesgo</th></tr></thead>
         <tbody>{"".join(body_rows)}</tbody>
       </table>
     </div>
@@ -352,6 +482,8 @@ function applyFilters(){{
     if(f==='api') ok=ok&&tr.dataset.api==='1';
     if(f==='betano') ok=ok&&tr.dataset.betano==='1';
     if(f==='no_betano') ok=ok&&tr.dataset.betano==='0';
+    if(f==='seguro') ok=ok&&txt.includes('seguro');
+    if(f==='valor') ok=ok&&txt.includes('valor');
     tr.style.display=ok?'':'none';
   }}
 }}

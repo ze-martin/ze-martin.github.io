@@ -140,6 +140,19 @@ MARKET_ORDER = [
     "Apuesta sin Empate",
 ]
 
+BETANO_VALID_LINE_RANGES = {
+    "TOTALS": (0.5, 6.5),
+    "FIRST_HALF_TOTALS": (0.5, 3.5),
+    "TEAM_TOTAL_HOME": (0.5, 5.5),
+    "TEAM_TOTAL_AWAY": (0.5, 5.5),
+    "CORNERS_TOTALS": (6.5, 14.5),
+    "CORNERS_HOME": (0.5, 9.5),
+    "CORNERS_AWAY": (0.5, 9.5),
+    "CARDS_TOTALS": (1.5, 9.5),
+    "CARDS_HOME": (0.5, 5.5),
+    "CARDS_AWAY": (0.5, 5.5),
+}
+
 
 def norm(value: str | None) -> str:
     text = unicodedata.normalize("NFD", value or "")
@@ -160,6 +173,77 @@ def as_float(value: str | None) -> float | None:
     if 1.01 <= number <= 100:
         return number
     return None
+
+
+def is_valid_betano_line(key_prefix: str, line: float) -> bool:
+    bounds = BETANO_VALID_LINE_RANGES.get(key_prefix)
+    if not bounds:
+        return True
+    minimum, maximum = bounds
+    return minimum <= line <= maximum
+
+
+def fair_odds(probability: float | None) -> float | None:
+    if probability is None or probability <= 0:
+        return None
+    return 1 / probability
+
+
+def combined_recommendation_score(market: dict[str, Any]) -> float:
+    base = float(market.get("recommendation_score") or 0)
+    betano_odds = market.get("odds_betano")
+    ev_betano = market.get("ev_betano")
+    if betano_odds is not None:
+        base += 8
+        if ev_betano is not None:
+            base += max(-10, min(float(ev_betano) * 16, 22))
+    tier = market.get("recommendation_tier")
+    if tier == "Seguro":
+        base += 5
+    elif tier == "Valor":
+        base += 2
+    elif tier == "Evitar":
+        base -= 15
+    if market.get("value_warning"):
+        base -= 4
+    return round(base, 3)
+
+
+def select_enriched_pick(markets: list[dict[str, Any]], fallback: dict[str, Any] | None) -> dict[str, Any] | None:
+    candidates = [
+        market
+        for market in markets
+        if (market.get("odds_betano") is not None or market.get("odds_api", market.get("odds")) is not None)
+        and (market.get("probability") or 0) >= 0.5
+        and market.get("recommendation_tier") != "Evitar"
+        and int(market.get("market_priority") or 0) >= 3
+    ]
+    if not candidates:
+        return fallback
+    return sorted(
+        candidates,
+        key=lambda market: (
+            market.get("combined_recommendation_score") or market.get("recommendation_score") or 0,
+            market.get("probability") or 0,
+            market.get("ev_betano") if market.get("ev_betano") is not None else -999,
+            market.get("ev_api", market.get("ev")) if market.get("ev_api", market.get("ev")) is not None else -999,
+        ),
+        reverse=True,
+    )[0]
+
+
+def betano_coverage_status(scraped: dict[str, Any], markets: list[dict[str, Any]]) -> str:
+    if not scraped.get("url"):
+        return "Betano no expuesto"
+    market_count = int(scraped.get("market_count") or 0)
+    crossed_count = sum(1 for market in markets if market.get("odds_betano") is not None)
+    if market_count == 0:
+        return "Betano encontrado sin mercados mapeables"
+    if crossed_count == 0:
+        return "Betano capturado sin cruce equivalente"
+    if market_count < 12 or crossed_count < 8:
+        return "Betano parcial"
+    return "Betano mapeado"
 
 
 def split_match_name(match: str) -> tuple[str, str]:
@@ -303,6 +387,8 @@ def parse_over_under(chunk: list[str], key_prefix: str) -> dict[str, float]:
         if number is None or price is None:
             continue
         side_key = "OVER" if side in {"mas", "mas de"} else "UNDER"
+        if not is_valid_betano_line(key_prefix, number):
+            continue
         line_key = str(number).replace(".", "_")
         odds[f"{key_prefix}:{side_key}_{line_key}"] = price
     return odds
@@ -574,14 +660,18 @@ def enrich_data(data: dict[str, Any], betano: dict[str, dict[str, Any]]) -> dict
         }
         result["betano_source_url"] = scraped.get("url")
         result["betano_market_count"] = scraped.get("market_count", 0)
+        result["betano_raw_odds"] = odds_map
         for market in result.get("all_markets", []):
             market["odds_api"] = market.get("odds")
             market["ev_api"] = market.get("ev")
             market["bookmaker_api"] = (market.get("bookmaker") or api_bookmaker or "API-Football") if market["odds_api"] is not None else None
-            market["bookmaker_betano"] = "Betano" if odds_map else None
             betano_odds = odds_map.get(market.get("key"))
+            market["bookmaker_betano"] = "Betano" if betano_odds is not None else None
             market["odds_betano"] = betano_odds
             market["betano_source_url"] = scraped.get("url")
+            fair = market.get("fair_odds") or fair_odds(market.get("probability"))
+            market["edge_betano"] = round(betano_odds - fair, 4) if betano_odds is not None and fair is not None else None
+            market["value_ratio_betano"] = round(betano_odds / fair, 4) if betano_odds is not None and fair is not None else None
             market["ev_betano"] = round((market.get("probability") or 0) * betano_odds - 1, 4) if betano_odds else None
             if betano_odds is None:
                 market["status_betano"] = "No encontrado en Betano"
@@ -589,14 +679,23 @@ def enrich_data(data: dict[str, Any], betano: dict[str, dict[str, Any]]) -> dict
                 market["status_betano"] = "EV positivo Betano"
             else:
                 market["status_betano"] = "EV negativo Betano"
+            market["combined_recommendation_score"] = combined_recommendation_score(market)
+        result["betano_coverage_status"] = betano_coverage_status(scraped, result.get("all_markets", []))
+        rec = result.get("recommended_pick") or {}
+        enriched_pick = select_enriched_pick(result.get("all_markets", []), rec or None)
+        if enriched_pick:
+            result["recommended_pick"] = deepcopy(enriched_pick)
         rec = result.get("recommended_pick") or {}
         if rec:
             rec["odds_api"] = rec.get("odds")
             rec["ev_api"] = rec.get("ev")
             rec["bookmaker_api"] = (rec.get("bookmaker") or api_bookmaker or "API-Football") if rec["odds_api"] is not None else None
-            rec["bookmaker_betano"] = "Betano" if odds_map else None
             betano_odds = odds_map.get(rec.get("key"))
+            rec["bookmaker_betano"] = "Betano" if betano_odds is not None else None
             rec["odds_betano"] = betano_odds
+            fair = rec.get("fair_odds") or fair_odds(rec.get("probability"))
+            rec["edge_betano"] = round(betano_odds - fair, 4) if betano_odds is not None and fair is not None else None
+            rec["value_ratio_betano"] = round(betano_odds / fair, 4) if betano_odds is not None and fair is not None else None
             rec["ev_betano"] = round((rec.get("probability") or 0) * betano_odds - 1, 4) if betano_odds else None
             rec["status_betano"] = (
                 "No encontrado en Betano"
@@ -604,6 +703,8 @@ def enrich_data(data: dict[str, Any], betano: dict[str, dict[str, Any]]) -> dict
                 else ("EV positivo Betano" if rec["ev_betano"] > 0 else "EV negativo Betano")
             )
             rec["betano_source_url"] = scraped.get("url")
+            rec["combined_recommendation_score"] = combined_recommendation_score(rec)
+            rec["betano_coverage_status"] = result["betano_coverage_status"]
     return enriched
 
 
