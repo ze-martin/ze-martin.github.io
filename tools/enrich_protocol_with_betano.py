@@ -14,6 +14,16 @@ from typing import Any
 
 BETANO_HOME = "https://www.betano.pe/"
 BETANO_DISCOVERY_URLS = [
+    # League pages expose tomorrow/future events much more reliably than the
+    # generic football landing page. Keep these first so the scraper finds links
+    # before Betano rotates the home/today carousels.
+    "https://www.betano.pe/sport/futbol/inglaterra/premier-league/1/",
+    "https://www.betano.pe/sport/futbol/italia/serie-a/1635/",
+    "https://www.betano.pe/sport/futbol/francia/ligue-1/215/",
+    "https://www.betano.pe/sport/futbol/alemania/bundesliga/216/",
+    "https://www.betano.pe/sport/futbol/espana/laliga/5/",
+    "https://www.betano.pe/sport/futbol/peru/liga-1/17079/",
+    "https://www.betano.pe/sport/futbol/brasil/brasileirao-serie-a-betano/10016/",
     BETANO_HOME,
     "https://www.betano.pe/sport/futbol/proximos-partidos-hoy/",
     "https://www.betano.pe/sport/futbol/",
@@ -49,7 +59,12 @@ TEAM_ALIASES = {
     "peru": ["peru", "perú"],
     "belgium": ["belgium", "bélgica", "belgica"],
     "norway": ["norway", "noruega"],
+    "estac troyes": ["estac troyes", "es troyes", "troyes"],
+    "rennes": ["rennes", "stade rennais", "rennais"],
+    "club deportivo los chankas": ["club deportivo los chankas", "los chankas", "los chankas cyc"],
+    "adt": ["adt", "asociacion deportiva tarma", "asociación deportiva tarma", "tarma"],
     "athletico-pr": ["athletico pr", "athletico paranaense", "atlético paranaense", "athletico"],
+    "atletico paranaense": ["atletico paranaense", "atlético paranaense", "athletico paranaense", "athletico pr", "atletico pr"],
     "atletico-mg": ["atletico mg", "atlético mg", "atletico mineiro", "atlético mineiro"],
     "atletico goianiense": ["atletico goianiense", "atlético goianiense", "atletico go"],
     "bahia": ["bahia", "ec bahia"],
@@ -100,6 +115,8 @@ TEAM_ALIASES = {
     "central cordoba de santiago": ["central cordoba", "central córdoba", "central cordoba de santiago"],
     "aldosivi": ["aldosivi"],
     "barracas central": ["barracas central", "barracas"],
+    "chapecoense-sc": ["chapecoense sc", "chapecoense"],
+    "chapecoense sc": ["chapecoense sc", "chapecoense"],
 }
 
 MARKET_ORDER = [
@@ -493,20 +510,7 @@ async def collect_event_links_from_page(page, *, max_scrolls: int = 9) -> list[d
     return links
 
 
-async def discover_event_links(page, matches: list[dict[str, str]]) -> dict[str, str]:
-    links: list[dict[str, str]] = []
-    seen: set[str] = set()
-    for url in BETANO_DISCOVERY_URLS:
-        try:
-            await page.goto(url, wait_until="domcontentloaded", timeout=18000)
-            await page.wait_for_timeout(random.randint(4500, 6500))
-            for item in await collect_event_links_from_page(page, max_scrolls=8):
-                href = item.get("href") or ""
-                if href and href not in seen:
-                    seen.add(href)
-                    links.append(item)
-        except Exception:
-            continue
+def match_event_links(links: list[dict[str, str]], matches: list[dict[str, str]]) -> dict[str, str]:
     found: dict[str, str] = {}
     for match in matches:
         home_aliases = aliases(match["home"])
@@ -516,6 +520,49 @@ async def discover_event_links(page, matches: list[dict[str, str]]) -> dict[str,
             if any(alias in haystack for alias in home_aliases) and any(alias in haystack for alias in away_aliases):
                 found[match["match"]] = item["href"]
                 break
+    return found
+
+
+async def discover_event_links(page, matches: list[dict[str, str]]) -> dict[str, str]:
+    links: list[dict[str, str]] = []
+    seen: set[str] = set()
+    found: dict[str, str] = {}
+    for url in BETANO_DISCOVERY_URLS:
+        scan_page = page
+        try:
+            browser = page.context.browser
+            if browser is not None:
+                scan_page = await browser.new_page(
+                    locale="es-PE",
+                    timezone_id="America/Lima",
+                    viewport={"width": 1365, "height": 1400},
+                    user_agent=(
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/120.0.0.0 Safari/537.36"
+                    ),
+                )
+                scan_page.set_default_timeout(25000)
+                await scan_page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+            await scan_page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            await scan_page.wait_for_timeout(random.randint(5500, 8000))
+            for item in await collect_event_links_from_page(scan_page, max_scrolls=5):
+                href = item.get("href") or ""
+                if href and href not in seen:
+                    seen.add(href)
+                    links.append(item)
+            found = match_event_links(links, matches)
+            print(f"Betano discovery: {len(found)}/{len(matches)} enlaces tras {url}", flush=True)
+            if len(found) == len(matches):
+                break
+        except Exception:
+            continue
+        finally:
+            if scan_page is not page:
+                try:
+                    await scan_page.close()
+                except Exception:
+                    pass
     return found
 
 
