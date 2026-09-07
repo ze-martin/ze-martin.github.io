@@ -29,6 +29,24 @@ BETANO_DISCOVERY_URLS = [
     "https://www.betano.pe/sport/futbol/",
 ]
 
+BETANO_LEAGUE_DISCOVERY_URLS = {
+    "premier league": ["https://www.betano.pe/sport/futbol/inglaterra/premier-league/1/"],
+    "serie a": [
+        "https://www.betano.pe/sport/futbol/italia/serie-a/1635/",
+        "https://www.betano.pe/sport/futbol/brasil/brasileirao-serie-a-betano/10016/",
+    ],
+    "ligue 1": ["https://www.betano.pe/sport/futbol/francia/ligue-1/215/"],
+    "bundesliga": ["https://www.betano.pe/sport/futbol/alemania/bundesliga/216/"],
+    "la liga": ["https://www.betano.pe/sport/futbol/espana/laliga/5/"],
+    "primera division": ["https://www.betano.pe/sport/futbol/peru/liga-1/17079/"],
+    "primera division peru": ["https://www.betano.pe/sport/futbol/peru/liga-1/17079/"],
+    "liga 1": ["https://www.betano.pe/sport/futbol/peru/liga-1/17079/"],
+    "conmebol libertadores": ["https://www.betano.pe/sport/futbol/campeonatos/copa-libertadores/189817/"],
+    "copa libertadores": ["https://www.betano.pe/sport/futbol/campeonatos/copa-libertadores/189817/"],
+    "conmebol sudamericana": ["https://www.betano.pe/sport/futbol/campeonatos/copa-sudamericana/189818/"],
+    "copa sudamericana": ["https://www.betano.pe/sport/futbol/campeonatos/copa-sudamericana/189818/"],
+}
+
 TEAM_ALIASES = {
     "argentina": ["argentina"],
     "egypt": ["egypt", "egipto"],
@@ -59,6 +77,8 @@ TEAM_ALIASES = {
     "peru": ["peru", "perú"],
     "belgium": ["belgium", "bélgica", "belgica"],
     "norway": ["norway", "noruega"],
+    "getafe": ["getafe", "getafe cf"],
+    "celta vigo": ["celta vigo", "celta de vigo", "rc celta de vigo", "celta"],
     "estac troyes": ["estac troyes", "es troyes", "troyes"],
     "rennes": ["rennes", "stade rennais", "rennais"],
     "club deportivo los chankas": ["club deportivo los chankas", "los chankas", "los chankas cyc"],
@@ -450,19 +470,28 @@ def parse_text_markets(text: str, home: str, away: str) -> dict[str, float]:
 
 
 async def close_overlays(page) -> None:
-    await page.evaluate(
-        """() => {
-          for (const sel of ['[data-testid="landing-modal-close-button"]', '.ot-close-icon', 'button[aria-label="Cerrar"]']) {
-            const el = document.querySelector(sel);
-            if (el) el.click();
-          }
-          for (const button of [...document.querySelectorAll('button')]) {
-            const text = (button.innerText || '').trim();
-            if (['SÍ, ACEPTO', 'SI, ACEPTO', 'NO, GRACIAS'].includes(text)) button.click();
-          }
-        }"""
-    )
-    await page.wait_for_timeout(700)
+    try:
+        await asyncio.wait_for(
+            page.evaluate(
+                """() => {
+                  for (const sel of ['[data-testid="landing-modal-close-button"]', '.ot-close-icon', 'button[aria-label="Cerrar"]']) {
+                    const el = document.querySelector(sel);
+                    if (el) el.click();
+                  }
+                  for (const button of [...document.querySelectorAll('button')]) {
+                    const text = (button.innerText || '').trim();
+                    if (['SÍ, ACEPTO', 'SI, ACEPTO', 'NO, GRACIAS'].includes(text)) button.click();
+                  }
+                }"""
+            ),
+            timeout=5,
+        )
+    except Exception:
+        pass
+    try:
+        await page.wait_for_timeout(500)
+    except Exception:
+        pass
 
 
 async def click_normalized(page, target: str, prefer_market: bool = False) -> bool:
@@ -495,9 +524,15 @@ async def collect_event_links_from_page(page, *, max_scrolls: int = 9) -> list[d
     seen: set[str] = set()
     for _ in range(max_scrolls):
         await close_overlays(page)
-        page_links = await page.locator("a[href*='/cuotas-de-partido/']").evaluate_all(
-            """els => els.map(a => ({text: a.innerText || '', href: a.href || ''}))"""
-        )
+        try:
+            page_links = await asyncio.wait_for(
+                page.locator("a[href*='/cuotas-de-partido/']").evaluate_all(
+                    """els => els.map(a => ({text: a.innerText || '', href: a.href || ''}))"""
+                ),
+                timeout=8,
+            )
+        except Exception:
+            page_links = []
         for item in page_links:
             href = item.get("href") or ""
             href = href.split("?", 1)[0].split("#", 1)[0]
@@ -505,8 +540,11 @@ async def collect_event_links_from_page(page, *, max_scrolls: int = 9) -> list[d
                 seen.add(href)
                 item["href"] = href
                 links.append(item)
-        await page.mouse.wheel(0, random.randint(700, 1200))
-        await page.wait_for_timeout(random.randint(800, 1400))
+        try:
+            await page.mouse.wheel(0, random.randint(700, 1200))
+            await page.wait_for_timeout(random.randint(800, 1400))
+        except Exception:
+            pass
     return links
 
 
@@ -523,13 +561,27 @@ def match_event_links(links: list[dict[str, str]], matches: list[dict[str, str]]
     return found
 
 
+def discovery_urls_for_matches(matches: list[dict[str, str]]) -> list[str]:
+    urls: list[str] = []
+    for match in matches:
+        league_key = norm(match.get("league", ""))
+        for url in BETANO_LEAGUE_DISCOVERY_URLS.get(league_key, []):
+            if url not in urls:
+                urls.append(url)
+    for url in BETANO_DISCOVERY_URLS:
+        if url not in urls:
+            urls.append(url)
+    return urls
+
+
 async def discover_event_links(page, matches: list[dict[str, str]]) -> dict[str, str]:
     links: list[dict[str, str]] = []
     seen: set[str] = set()
     found: dict[str, str] = {}
-    for url in BETANO_DISCOVERY_URLS:
+    for url in discovery_urls_for_matches(matches):
         scan_page = page
         try:
+            print(f"Betano discovery: revisando {url}", flush=True)
             browser = page.context.browser
             if browser is not None:
                 scan_page = await browser.new_page(
@@ -546,7 +598,7 @@ async def discover_event_links(page, matches: list[dict[str, str]]) -> dict[str,
                 await scan_page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
             await scan_page.goto(url, wait_until="domcontentloaded", timeout=30000)
             await scan_page.wait_for_timeout(random.randint(5500, 8000))
-            for item in await collect_event_links_from_page(scan_page, max_scrolls=5):
+            for item in await asyncio.wait_for(collect_event_links_from_page(scan_page, max_scrolls=4), timeout=65):
                 href = item.get("href") or ""
                 if href and href not in seen:
                     seen.add(href)
@@ -555,7 +607,8 @@ async def discover_event_links(page, matches: list[dict[str, str]]) -> dict[str,
             print(f"Betano discovery: {len(found)}/{len(matches)} enlaces tras {url}", flush=True)
             if len(found) == len(matches):
                 break
-        except Exception:
+        except Exception as exc:
+            print(f"Betano discovery: error en {url}: {type(exc).__name__}: {str(exc)[:160]}", flush=True)
             continue
         finally:
             if scan_page is not page:
@@ -760,7 +813,7 @@ async def run(source: Path, output: Path) -> Path:
     matches: list[dict[str, str]] = []
     for result in data.get("results", []):
         home, away = split_match_name(result["match"])
-        matches.append({"match": result["match"], "home": home, "away": away})
+        matches.append({"match": result["match"], "home": home, "away": away, "league": result.get("league", "")})
 
     try:
         from playwright.async_api import async_playwright
