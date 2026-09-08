@@ -222,7 +222,8 @@ Usa Playwright con:
 - timezone `America/Lima`;
 - extracción de mercados visibles;
 - aliases de equipos en español.
-- descubrimiento por páginas específicas de Betano cuando el protocolo sea `full`, incluyendo Premier League, Serie A Italia, Ligue 1, Bundesliga, LaLiga, Liga 1 Perú, Brasileirão Serie A, Copa Libertadores y Copa Sudamericana.
+- descubrimiento por páginas específicas de Betano cuando el protocolo sea `full`, incluyendo Premier League, EFL Cup/League Cup, Serie A Italia, Ligue 1, Bundesliga, LaLiga, Liga 1 Perú, Brasileirão Serie A, Liga Profesional Argentina, Copa Argentina, Copa Libertadores y Copa Sudamericana.
+- usar rutas alternativas de Betano cuando existan slugs nuevos o antiguos para la misma competición, por ejemplo Libertadores `436g`/`189817` y Sudamericana `435g`/`189818`.
 
 Si Betano no expone una competición, por ejemplo algunos partidos de League Cup/EFL Cup, no inventar cuotas: marcar el partido como `Betano no expuesto`.
 
