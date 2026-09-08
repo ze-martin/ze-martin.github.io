@@ -72,12 +72,97 @@ def numeric(row: dict, primary: str, fallback: str | None = None) -> Any:
     return value
 
 
+def result_label(value: str | None) -> str:
+    return {"W": "G", "D": "E", "L": "P"}.get(value or "", value or "")
+
+
+def fixture_label(item: dict) -> str:
+    date_value = item.get("date_lima") or str(item.get("date") or "")[:10]
+    league = item.get("league") or ""
+    home = item.get("home") or ""
+    away = item.get("away") or ""
+    score = item.get("score") or ""
+    result = result_label(item.get("result_for_team"))
+    match_text = f"{home} {score} {away}".strip() if score else f"{home} vs {away}".strip()
+    if result:
+        match_text = f"{match_text} ({result})"
+    return " · ".join(str(part) for part in [date_value, league, match_text] if part)
+
+
+def audit_fixture_text(team_payload: dict, *, limit: int = 10) -> str:
+    fixtures = team_payload.get("recent_fixtures") or []
+    return "; ".join(fixture_label(item) for item in fixtures[:limit] if isinstance(item, dict))
+
+
+def result_audit(result: dict) -> dict:
+    audit = result.get("model_audit") or {}
+    team_inputs = audit.get("team_inputs") or {}
+    home = team_inputs.get("home") or {}
+    away = team_inputs.get("away") or {}
+    return {
+        "modelo_base": audit.get("base_model_source_label") or "",
+        "fuente_local": home.get("base_source_label") or "",
+        "partidos_local": home.get("matches") if home.get("matches") is not None else "",
+        "goles_favor_local": home.get("goals_for") if home.get("goals_for") is not None else "",
+        "goles_contra_local": home.get("goals_against") if home.get("goals_against") is not None else "",
+        "ultimos_local": audit_fixture_text(home),
+        "fuente_visita": away.get("base_source_label") or "",
+        "partidos_visita": away.get("matches") if away.get("matches") is not None else "",
+        "goles_favor_visita": away.get("goals_for") if away.get("goals_for") is not None else "",
+        "goles_contra_visita": away.get("goals_against") if away.get("goals_against") is not None else "",
+        "ultimos_visita": audit_fixture_text(away),
+    }
+
+
+def build_audit_rows(data: dict) -> list[dict]:
+    audit_rows: list[dict] = []
+    for result in data.get("results", []):
+        audit = result.get("model_audit") or {}
+        team_inputs = audit.get("team_inputs") or {}
+        if not team_inputs:
+            audit_rows.append(
+                {
+                    "hora": result.get("time_lima", ""),
+                    "partido": result.get("match", ""),
+                    "equipo": "No disponible",
+                    "rol": "",
+                    "fuente": "Regenerar protocolo para auditar inputs",
+                    "partidos": "",
+                    "goles_favor": "",
+                    "goles_contra": "",
+                    "fixtures": [],
+                }
+            )
+            continue
+        for side, role in [("home", "Local"), ("away", "Visita")]:
+            team_payload = team_inputs.get(side) or {}
+            audit_rows.append(
+                {
+                    "hora": result.get("time_lima", ""),
+                    "partido": result.get("match", ""),
+                    "equipo": team_payload.get("team") or "",
+                    "rol": role,
+                    "fuente": team_payload.get("base_source_label") or audit.get("base_model_source_label") or "",
+                    "partidos": team_payload.get("matches") if team_payload.get("matches") is not None else "",
+                    "goles_favor": team_payload.get("goals_for") if team_payload.get("goals_for") is not None else "",
+                    "goles_contra": team_payload.get("goals_against") if team_payload.get("goals_against") is not None else "",
+                    "fixtures": [
+                        fixture_label(item)
+                        for item in (team_payload.get("recent_fixtures") or [])[:10]
+                        if isinstance(item, dict)
+                    ],
+                }
+            )
+    return audit_rows
+
+
 def build_rows(data: dict) -> tuple[list[dict], list[dict], dict[str, list[dict]]]:
     rows: list[dict] = []
     summary: list[dict] = []
     top_ev: dict[str, list[dict]] = {}
 
     for result in data["results"]:
+        audit_fields = result_audit(result)
         rec = result.get("recommended_pick") or {}
         markets = result.get("all_markets", [])
         if not rec:
@@ -174,6 +259,7 @@ def build_rows(data: dict) -> tuple[list[dict], list[dict], dict[str, list[dict]
                     "razon": market.get("reason") or "",
                     "riesgo": market.get("risk") or "",
                     "betano_url": market.get("betano_source_url") or result.get("betano_source_url") or "",
+                    **audit_fields,
                 }
             )
     return rows, summary, top_ev
@@ -227,6 +313,17 @@ def write_csv(rows: list[dict], path: Path) -> None:
         "razon",
         "riesgo",
         "betano_url",
+        "modelo_base",
+        "fuente_local",
+        "partidos_local",
+        "goles_favor_local",
+        "goles_contra_local",
+        "ultimos_local",
+        "fuente_visita",
+        "partidos_visita",
+        "goles_favor_visita",
+        "goles_contra_visita",
+        "ultimos_visita",
     ]
     with path.open("w", encoding="utf-8-sig", newline="") as file:
         writer = csv.DictWriter(file, fieldnames=fields)
@@ -299,7 +396,7 @@ def build_combo_rows(rows: list[dict]) -> list[dict]:
     return combo
 
 
-def write_html(rows: list[dict], summary: list[dict], src: Path, title: str, path: Path) -> None:
+def write_html(rows: list[dict], summary: list[dict], data: dict, src: Path, title: str, path: Path) -> None:
     summary_keys = [
         "hora",
         "partido",
@@ -351,6 +448,32 @@ def write_html(rows: list[dict], summary: list[dict], src: Path, title: str, pat
         f'<option value="{html.escape(item["partido"])}">{html.escape(item["partido"])}</option>'
         for item in summary
     )
+    audit_rows = []
+    for item in build_audit_rows(data):
+        fixtures = item.get("fixtures") or []
+        fixture_html = (
+            "<ol>" + "".join(f"<li>{html.escape(str(fixture))}</li>" for fixture in fixtures) + "</ol>"
+            if fixtures
+            else '<span class="small">Sin lista detallada disponible</span>'
+        )
+        audit_rows.append(
+            "<tr>"
+            + "".join(
+                f"<td>{html.escape(str(item[key]))}</td>"
+                for key in [
+                    "hora",
+                    "partido",
+                    "equipo",
+                    "rol",
+                    "fuente",
+                    "partidos",
+                    "goles_favor",
+                    "goles_contra",
+                ]
+            )
+            + f'<td class="audit-fixtures">{fixture_html}</td>'
+            + "</tr>"
+        )
 
     body_rows = []
     for idx, row in enumerate(rows, 1):
@@ -413,6 +536,7 @@ th{{position:sticky;top:0;background:#18233a;z-index:2;color:#cfe0ff;cursor:poin
 .evpos td{{background:rgba(29,108,70,.22)}}.evneg td{{background:rgba(120,40,52,.16)}}.noev td{{color:#aab5ca}}
 .badge{{display:inline-block;padding:2px 7px;border-radius:999px;font-size:12px;background:#203253;color:#cfe0ff}}.kpis{{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:12px}}
 .kpi{{background:#0e1628;border:1px solid var(--line);border-radius:12px;padding:12px}}.kpi b{{display:block;font-size:22px}}
+.audit-fixtures ol{{margin:0;padding-left:18px}}.audit-fixtures li{{margin-bottom:4px;min-width:520px}}
 @media(max-width:900px){{.controls,.kpis{{grid-template-columns:1fr}}main,header{{padding-left:14px;padding-right:14px}}}}
 </style>
 </head>
@@ -435,6 +559,16 @@ th{{position:sticky;top:0;background:#18233a;z-index:2;color:#cfe0ff;cursor:poin
       <table id="summary">
         <thead><tr><th>Hora</th><th>Partido</th><th>Pick principal</th><th>Prob</th><th>Cuota justa</th><th>Cuota API-Football</th><th>EV API-Football</th><th>Cuota Betano</th><th>EV Betano</th><th>Score</th><th>Perfil</th><th>Cobertura Betano</th><th>Mercados</th><th>Con API-Football</th><th>Con Betano</th><th>EV+ API-Football</th><th>EV+ Betano</th></tr></thead>
         <tbody>{summary_rows}</tbody>
+      </table>
+    </div>
+  </section>
+  <section class="card">
+    <h2>Auditoría del modelo: últimos partidos usados</h2>
+    <p class="small">Esta tabla muestra los partidos recientes que alimentaron el cálculo por equipo. Si el torneo actual no tiene muestra suficiente, el modelo usa fallback multi-competición; por ejemplo Liga, copas y amistosos recientes disponibles en API-Football.</p>
+    <div class="tablewrap" style="max-height:58vh">
+      <table id="audit">
+        <thead><tr><th>Hora</th><th>Partido</th><th>Equipo</th><th>Rol</th><th>Fuente usada</th><th>Partidos</th><th>Goles favor</th><th>Goles contra</th><th>Últimos partidos usados</th></tr></thead>
+        <tbody>{"".join(audit_rows)}</tbody>
       </table>
     </div>
   </section>
@@ -525,7 +659,7 @@ def main() -> None:
     html_path = out / f"{args.prefix}.html"
     csv_path = out / f"{args.prefix}_todos_los_mercados.csv"
     write_csv(rows, csv_path)
-    write_html(rows, summary, src, build_title(data, args.date), html_path)
+    write_html(rows, summary, data, src, build_title(data, args.date), html_path)
 
     print(html_path.resolve())
     print(csv_path.resolve())

@@ -6,6 +6,7 @@ import math
 import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
+from typing import Any
 from zoneinfo import ZoneInfo
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -267,6 +268,132 @@ def premium_source(match: dict) -> str:
     return "premium_current_tournament"
 
 
+def fixture_audit_row(item: dict[str, Any], team_name: str) -> dict[str, Any]:
+    goals = item.get("goals") or {}
+    home = item.get("home") or item.get("teams", {}).get("home", {}).get("name") or ""
+    away = item.get("away") or item.get("teams", {}).get("away", {}).get("name") or ""
+    date_value = item.get("date") or item.get("fixture", {}).get("date") or ""
+    date_lima = ""
+    time_lima = ""
+    kickoff_lima = ""
+    if date_value:
+        try:
+            date_lima, time_lima, kickoff_lima = to_lima(str(date_value))
+        except Exception:
+            date_lima = str(date_value)[:10]
+    home_goals = goals.get("home")
+    away_goals = goals.get("away")
+    score = ""
+    if home_goals is not None and away_goals is not None:
+        score = f"{home_goals}-{away_goals}"
+    result = item.get("result_for_team") or ""
+    if not result and score:
+        team_key = team_name.lower()
+        is_home = team_key in str(home).lower() or str(home).lower() in team_key
+        is_away = team_key in str(away).lower() or str(away).lower() in team_key
+        if is_home or is_away:
+            own = home_goals if is_home else away_goals
+            other = away_goals if is_home else home_goals
+            if own > other:
+                result = "W"
+            elif own < other:
+                result = "L"
+            else:
+                result = "D"
+    league_value = item.get("league") or ""
+    if isinstance(league_value, dict):
+        league_value = league_value.get("name") or ""
+    return {
+        "fixture_id": item.get("fixture_id") or item.get("fixture", {}).get("id"),
+        "date": date_value,
+        "date_lima": date_lima,
+        "time_lima": time_lima,
+        "kickoff_lima": kickoff_lima,
+        "league": league_value,
+        "home": home,
+        "away": away,
+        "score": score,
+        "result_for_team": result,
+    }
+
+
+def build_model_audit(
+    match: dict[str, Any],
+    stats: dict[str, dict[str, Any]],
+    base_model_source: str | None,
+    probability_sources: dict[str, str],
+) -> dict[str, Any]:
+    raw = match.get("raw", {}) if isinstance(match.get("raw"), dict) else {}
+    fallback = raw.get("fallback_stats", {}) if isinstance(raw.get("fallback_stats"), dict) else {}
+    context = raw.get("analysis_context", {}) if isinstance(raw.get("analysis_context"), dict) else {}
+    recent_used = context.get("recent_fixtures_used", {}) if isinstance(context.get("recent_fixtures_used"), dict) else {}
+    data_sources = context.get("data_sources", {}) if isinstance(context.get("data_sources"), dict) else {}
+
+    def side_payload(side: str, team_name: str) -> dict[str, Any]:
+        side_stats = stats.get(side, {}) if isinstance(stats.get(side), dict) else {}
+        fallback_side = fallback.get(side, {}) if isinstance(fallback.get(side), dict) else {}
+        if base_model_source == "recent_all_competitions":
+            source = fallback_side.get("source") or "recent_all_competitions"
+            source_label_text = source_label("recent_all_competitions")
+            sample_fixtures = fallback_side.get("sample_fixtures") or []
+            matches_count = fallback_side.get("matches")
+            goals_for = fallback_side.get("goals_for")
+            goals_against = fallback_side.get("goals_against")
+        else:
+            source = data_sources.get(f"{side}_recent") or base_model_source or "current_tournament"
+            source_label_text = source_label(source)
+            sample_fixtures = recent_used.get(side) or []
+            matches_count = side_stats.get("matches")
+            goals_for = side_stats.get("goals_for")
+            goals_against = side_stats.get("goals_against")
+        return {
+            "team": team_name,
+            "side": side,
+            "base_source": source,
+            "base_source_label": source_label_text,
+            "matches": matches_count,
+            "goals_for": goals_for,
+            "goals_against": goals_against,
+            "recent_fixtures": [
+                fixture_audit_row(item, team_name)
+                for item in sample_fixtures[:10]
+                if isinstance(item, dict)
+            ],
+        }
+
+    advanced_sources = sorted(
+        {
+            source
+            for source in probability_sources.values()
+            if source and source.startswith("premium_")
+        }
+    )
+    base_sources = sorted(
+        {
+            source
+            for source in probability_sources.values()
+            if source and not source.startswith("premium_")
+        }
+    )
+    return {
+        "base_model_source": base_model_source or (base_sources[0] if base_sources else None),
+        "base_model_source_label": source_label(base_model_source or (base_sources[0] if base_sources else None)),
+        "probability_sources": [
+            {"key": source, "label": source_label(source)}
+            for source in sorted(set(probability_sources.values()))
+            if source
+        ],
+        "advanced_sources": [
+            {"key": source, "label": source_label(source)}
+            for source in advanced_sources
+        ],
+        "team_inputs": {
+            "home": side_payload("home", str(match.get("home_team") or "")),
+            "away": side_payload("away", str(match.get("away_team") or "")),
+        },
+    }
+
+
 def generate(from_date: date, to_date: date, leagues: list[str], date_lima_filter: str | None = None, selected_numbers: set[int] | None = None) -> dict:
     api = FootballAPI()
     model = PoissonModel()
@@ -311,6 +438,7 @@ def generate(from_date: date, to_date: date, leagues: list[str], date_lima_filte
         probability_sources: dict[str, str] = {}
         note_parts: list[str] = []
         stats = api.get_team_stats(match)
+        base_model_source: str | None = None
         try:
             base_probabilities = model.match_probabilities(
                 team_stats(match["home_team"], stats.get("home", {})),
@@ -318,6 +446,7 @@ def generate(from_date: date, to_date: date, leagues: list[str], date_lima_filte
             )
             probabilities.update(base_probabilities)
             probability_sources.update({key: "current_tournament" for key in base_probabilities})
+            base_model_source = "current_tournament"
         except Exception as exc:
             note_parts.append(f"Poisson torneo actual no disponible: {exc}")
             fallback_stats = api.get_fallback_team_stats(match)
@@ -328,6 +457,7 @@ def generate(from_date: date, to_date: date, leagues: list[str], date_lima_filte
                 )
                 probabilities.update(fallback_probabilities)
                 probability_sources.update({key: "recent_all_competitions" for key in fallback_probabilities})
+                base_model_source = "recent_all_competitions"
                 home_matches = int(fallback_stats.get("home", {}).get("matches") or 0)
                 away_matches = int(fallback_stats.get("away", {}).get("matches") or 0)
                 note_parts.append(
@@ -369,6 +499,7 @@ def generate(from_date: date, to_date: date, leagues: list[str], date_lima_filte
                 result["note"] = "; ".join(note_parts)
         else:
             result["note"] = "; ".join(note_parts) if note_parts else "No se pudieron calcular probabilidades"
+        result["model_audit"] = build_model_audit(match, stats, base_model_source, probability_sources)
         results.append(result)
 
     return {

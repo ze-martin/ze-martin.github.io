@@ -466,6 +466,10 @@ class FootballAPI:
                 "away_last_5": self._recent_form(away_recent[:5], away_id),
                 "away_last_10": self._recent_form(away_recent[:10], away_id),
             },
+            "recent_fixtures_used": {
+                "home": self._recent_fixture_samples(home_recent, home_id),
+                "away": self._recent_fixture_samples(away_recent, away_id),
+            },
             "attacking_quality": {
                 "home": self._attacking_quality(home_stats_payload, home_recent_stats, home_id),
                 "away": self._attacking_quality(away_stats_payload, away_recent_stats, away_id),
@@ -548,6 +552,45 @@ class FootballAPI:
             if item.get("goals", {}).get("home") is not None and item.get("goals", {}).get("away") is not None
         ]
         return sorted(completed, key=lambda item: item.get("fixture", {}).get("date", ""), reverse=True)
+
+    def _recent_fixture_samples(
+        self,
+        fixtures: list[dict[str, Any]],
+        team_id: int | str | None,
+        *,
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        samples: list[dict[str, Any]] = []
+        for item in fixtures[:limit]:
+            teams = item.get("teams", {})
+            goals = item.get("goals", {})
+            home = teams.get("home", {})
+            away = teams.get("away", {})
+            home_goals = goals.get("home")
+            away_goals = goals.get("away")
+            result = ""
+            if team_id is not None and home_goals is not None and away_goals is not None:
+                is_home = home.get("id") == team_id
+                own_goals = home_goals if is_home else away_goals
+                opponent_goals = away_goals if is_home else home_goals
+                if own_goals > opponent_goals:
+                    result = "W"
+                elif own_goals < opponent_goals:
+                    result = "L"
+                else:
+                    result = "D"
+            samples.append(
+                {
+                    "fixture_id": item.get("fixture", {}).get("id"),
+                    "date": item.get("fixture", {}).get("date"),
+                    "league": item.get("league", {}).get("name"),
+                    "home": home.get("name"),
+                    "away": away.get("name"),
+                    "goals": goals,
+                    "result_for_team": result,
+                }
+            )
+        return samples
 
     def _recent_fixture_statistics(self, fixtures: list[dict[str, Any]]) -> list[dict[str, Any]]:
         samples: list[dict[str, Any]] = []

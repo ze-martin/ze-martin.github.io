@@ -144,6 +144,7 @@ class LocalProtocolStore:
                 "No inventar partidos ni cuotas.",
                 "Separar cuotas API-Football y Betano.",
                 "Publicar en GitHub Pages salvo instrucción contraria.",
+                "Mostrar auditoría del modelo con últimos partidos usados por equipo en HTML y CSV.",
             ],
         }
         self.save_agent_memory("published_protocol_workflow", memory)

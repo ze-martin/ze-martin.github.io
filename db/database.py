@@ -188,6 +188,7 @@ class Database:
                 "Si Betano no tiene equivalente, dejar vacío o No encontrado en Betano.",
                 "Publicar en GitHub Pages salvo instrucción contraria.",
                 "Validar HTML, CSV y respuesta HTTP 200 antes de responder.",
+                "Mostrar auditoría del modelo con últimos partidos usados por equipo en HTML y CSV.",
             ],
         }
         self.save_agent_memory("published_protocol_workflow", memory)

@@ -341,6 +341,8 @@ def publish(days: list[date], message: str | None, scope: str) -> str:
         "latest.html",
         "data\\protocol_memory.sqlite",
         "AGENTS.md",
+        "apis\\football_api.py",
+        "db\\database.py",
         "db\\local_protocol_store.py",
         "tools\\enrich_protocol_with_betano.py",
         "tools\\export_protocol_html.py",

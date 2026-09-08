@@ -136,6 +136,8 @@ El protocolo publicado debe usar el scoring enriquecido, no solo probabilidad si
 - marcar `alerta_valor` cuando el valor dependa demasiado de una cuota sospechosamente alta;
 - marcar `cobertura_betano` por partido (`Betano mapeado`, `Betano no expuesto`, etc.);
 - mostrar una sección HTML de `Vista combinada sugerida` con 3 o 4 picks por partido cuando haya candidatos suficientes.
+- mostrar una sección HTML de `Auditoría del modelo: últimos partidos usados`, con fuente usada por equipo, cantidad de partidos, goles a favor/en contra y los fixtures recientes que alimentaron el cálculo.
+- agregar en el CSV columnas de auditoría (`modelo_base`, `fuente_local`, `ultimos_local`, `fuente_visita`, `ultimos_visita`) para poder revisar qué datos deportivos entraron al modelo.
 
 En Betano se deben validar rangos razonables de líneas antes de mapear cuotas. No aceptar líneas fuera de rango que contaminen mercados, por ejemplo goles totales `+8.5` como si fuera un mercado normal prepartido.
 
