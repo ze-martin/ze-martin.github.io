@@ -145,8 +145,26 @@ class Database:
     def seed_agent_memory(self) -> None:
         memory = {
             "project": "D:\\CODEX\\APUESTAS",
-            "intent": "Cuando el usuario pida protocolo completo del Mundial, ejecutar flujo publicado completo.",
+            "intent": "Cuando el usuario pida protocolo completo, ejecutar flujo publicado completo con las ligas y copas seguidas.",
             "single_command": "python tools\\run_published_protocol.py --dates YYYY-MM-DD --leagues 1 --publish",
+            "full_command": "python tools\\run_published_protocol.py --dates YYYY-MM-DD --leagues 2,3,39,281,140,135,61,48,13,11,78,71,73,130,81 --report-scope full --publish",
+            "full_protocol_leagues": [
+                "Champions League",
+                "Europa League",
+                "Premier League",
+                "EFL Cup/League Cup",
+                "LaLiga",
+                "Serie A Italia",
+                "Ligue 1 Francia",
+                "Bundesliga",
+                "Liga 1 Perú",
+                "Serie A Brasil",
+                "Copa do Brasil",
+                "Liga Profesional Argentina",
+                "Copa Argentina",
+                "Copa Libertadores",
+                "Copa Sudamericana",
+            ],
             "workflow": [
                 "generate_protocol_probabilities",
                 "enrich_protocol_with_betano",

@@ -23,9 +23,11 @@ OUTPUTS = ROOT / "outputs"
 REPORTS = ROOT / "reports"
 SITE = ROOT / "site"
 PUBLIC_BASE = "https://ze-martin.github.io/reports"
-FULL_PROTOCOL_LEAGUES = {"39", "281", "140", "135", "61", "48", "13", "11", "78", "71", "73", "130", "81"}
+FULL_PROTOCOL_LEAGUES = {"2", "3", "39", "281", "140", "135", "61", "48", "13", "11", "78", "71", "73", "130", "81"}
 SINGLE_LEAGUE_SCOPES = {
     "1": "world_cup",
+    "2": "champions_league",
+    "3": "europa_league",
     "11": "sudamericana",
     "13": "libertadores",
     "39": "premier",
