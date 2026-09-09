@@ -122,7 +122,7 @@ Este comando debe:
 - guardar en PostgreSQL si está disponible;
 - publicar en GitHub Pages si se usa `--publish`.
 - separar reportes por `report_scope` (`full`, `world_cup`, `mls`, etc.) para que una actualización no pise otra de la misma fecha.
-- no duplicar una fecha en la portada pública: si existen varias variantes para el mismo `YYYYMMDD`, `index.html` y `latest.html` deben mostrar una sola entrada canónica por día, priorizando el reporte más reciente y usando `full` como desempate.
+- no duplicar una fecha en la portada pública: si existen varias variantes para el mismo `YYYYMMDD`, `index.html` y `latest.html` deben mostrar una sola entrada canónica por día, priorizando el reporte con más contenido útil (auditoría, partidos y mercados) y usando `full` como desempate.
 - cuando se agregue una liga o copa a una fecha ya trabajada, actualizar el reporte de esa misma fecha; no crear otra fila visible para el mismo día salvo que el usuario pida explícitamente una variante separada.
 
 ## Mejoras obligatorias del protocolo

@@ -145,7 +145,7 @@ class LocalProtocolStore:
                 "Separar cuotas API-Football y Betano.",
                 "Publicar en GitHub Pages salvo instrucción contraria.",
                 "Mostrar auditoría del modelo con últimos partidos usados por equipo en HTML y CSV.",
-                "No duplicar fechas en index.html/latest.html: mostrar una sola entrada canónica por día, priorizando el reporte más reciente y full como desempate.",
+                "No duplicar fechas en index.html/latest.html: mostrar una sola entrada canónica por día, priorizando el reporte con más contenido útil (auditoría, partidos y mercados) y full como desempate.",
                 "Cuando se agregue una liga o copa a una fecha ya trabajada, actualizar esa fecha en vez de crear otra fila visible para el mismo día.",
             ],
         }

@@ -54,13 +54,25 @@ def report_sort_key(path: Path) -> tuple[str, float]:
     return date_key, path.stat().st_mtime
 
 
-def canonical_report_key(path: Path) -> tuple[str, int, float, int, str]:
+def report_content_score(path: Path) -> tuple[int, int, int]:
+    text = path.read_text(encoding="utf-8", errors="ignore")
+    matches = re.search(r"Partidos</span><b>(\d+)</b>", text)
+    markets = re.search(r"Mercados</span><b>(\d+)</b>", text)
+    has_audit = 1 if "Auditoría del modelo" in text else 0
+    return (
+        has_audit,
+        int(matches.group(1)) if matches else 0,
+        int(markets.group(1)) if markets else 0,
+    )
+
+
+def canonical_report_key(path: Path) -> tuple[str, int, int, int, int, int, int, str]:
     """Return a score for choosing one visible report per date.
 
     All HTML/CSV files are still copied to ``site/reports`` so old direct links
     continue working. The public index, however, should not duplicate the same
     calendar day when a league or cup is added later. We choose the most useful
-    report by date first, then by scope freshness and content size.
+    report by visible content first, then by scope and filesystem freshness.
     """
     report_date = extract_report_date(path) or "00000000"
     scope = extract_report_scope(path)
@@ -68,7 +80,17 @@ def canonical_report_key(path: Path) -> tuple[str, int, float, int, str]:
         "full": 30,
         "legacy": 20,
     }.get(scope, 10)
-    return report_date, int(path.stat().st_mtime), scope_priority, path.stat().st_size, path.name
+    has_audit, matches, markets = report_content_score(path)
+    return (
+        report_date,
+        has_audit,
+        matches,
+        markets,
+        path.stat().st_size,
+        scope_priority,
+        int(path.stat().st_mtime),
+        path.name,
+    )
 
 
 def select_visible_reports(html_files: list[Path]) -> list[Path]:
