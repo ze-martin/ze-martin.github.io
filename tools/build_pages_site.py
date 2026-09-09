@@ -22,19 +22,63 @@ def human_size(size: int) -> str:
 
 
 def report_title(path: Path) -> str:
+    report_date = extract_report_date(path)
+    if report_date:
+        return f"Protocolo {report_date}"
     name = path.stem
-    return (
-        name.replace("protocolo_", "Protocolo ")
-        .replace("_pc", "")
-        .replace("_", " ")
-        .title()
-    )
+    return name.replace("protocolo_", "Protocolo ").replace("_pc", "").replace("_", " ").title()
+
+
+def extract_report_date(path: Path) -> str | None:
+    match = re.search(r"(20\d{6})", path.name)
+    return match.group(1) if match else None
+
+
+def extract_report_scope(path: Path) -> str:
+    report_date = extract_report_date(path)
+    if not report_date:
+        return "sin_fecha"
+    stem = path.stem
+    legacy_stem = f"protocolo_{report_date}_pc"
+    if stem == legacy_stem:
+        return "legacy"
+    prefix = f"protocolo_{report_date}_"
+    suffix = "_pc"
+    if stem.startswith(prefix) and stem.endswith(suffix):
+        return stem[len(prefix) : -len(suffix)].strip("_") or "legacy"
+    return "custom"
 
 
 def report_sort_key(path: Path) -> tuple[str, float]:
-    match = re.search(r"(20\d{6})", path.name)
-    date_key = match.group(1) if match else "00000000"
+    date_key = extract_report_date(path) or "00000000"
     return date_key, path.stat().st_mtime
+
+
+def canonical_report_key(path: Path) -> tuple[str, int, float, int, str]:
+    """Return a score for choosing one visible report per date.
+
+    All HTML/CSV files are still copied to ``site/reports`` so old direct links
+    continue working. The public index, however, should not duplicate the same
+    calendar day when a league or cup is added later. We choose the most useful
+    report by date first, then by scope freshness and content size.
+    """
+    report_date = extract_report_date(path) or "00000000"
+    scope = extract_report_scope(path)
+    scope_priority = {
+        "full": 30,
+        "legacy": 20,
+    }.get(scope, 10)
+    return report_date, int(path.stat().st_mtime), scope_priority, path.stat().st_size, path.name
+
+
+def select_visible_reports(html_files: list[Path]) -> list[Path]:
+    by_date: dict[str, Path] = {}
+    for source in html_files:
+        report_date = extract_report_date(source) or source.name
+        current = by_date.get(report_date)
+        if current is None or canonical_report_key(source) > canonical_report_key(current):
+            by_date[report_date] = source
+    return sorted(by_date.values(), key=report_sort_key, reverse=True)
 
 
 def copy_reports() -> list[dict[str, str]]:
@@ -46,10 +90,13 @@ def copy_reports() -> list[dict[str, str]]:
         key=report_sort_key,
         reverse=True,
     )
+    visible_html_files = select_visible_reports(html_files)
 
     for source in html_files:
         target = REPORTS / source.name
         shutil.copy2(source, target)
+
+    for source in visible_html_files:
         reports.append(
             {
                 "title": report_title(source),
@@ -63,8 +110,8 @@ def copy_reports() -> list[dict[str, str]]:
     for source in sorted(OUTPUTS.glob("*.csv")):
         shutil.copy2(source, REPORTS / source.name)
 
-    if html_files:
-        shutil.copy2(html_files[0], SITE / "latest.html")
+    if visible_html_files:
+        shutil.copy2(visible_html_files[0], SITE / "latest.html")
 
     return reports
 

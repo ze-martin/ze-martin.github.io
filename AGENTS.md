@@ -122,6 +122,8 @@ Este comando debe:
 - guardar en PostgreSQL si está disponible;
 - publicar en GitHub Pages si se usa `--publish`.
 - separar reportes por `report_scope` (`full`, `world_cup`, `mls`, etc.) para que una actualización no pise otra de la misma fecha.
+- no duplicar una fecha en la portada pública: si existen varias variantes para el mismo `YYYYMMDD`, `index.html` y `latest.html` deben mostrar una sola entrada canónica por día, priorizando el reporte más reciente y usando `full` como desempate.
+- cuando se agregue una liga o copa a una fecha ya trabajada, actualizar el reporte de esa misma fecha; no crear otra fila visible para el mismo día salvo que el usuario pida explícitamente una variante separada.
 
 ## Mejoras obligatorias del protocolo
 
@@ -156,6 +158,8 @@ Los reportes publicados viven en:
 - Último reporte público: `latest.html`
 - Índice público: `index.html`
 - URL pública: `https://ze-martin.github.io/reports/protocolo_YYYYMMDD_pc.html`
+
+La carpeta pública `reports/` puede conservar variantes históricas o de alcance (`full`, `uefa_conmebol`, etc.) para no romper enlaces directos, pero la portada `index.html` debe agrupar por fecha y mostrar solo una fila visible por día.
 
 ## Base de datos operativa
 
