@@ -23,6 +23,8 @@ OUTPUTS = ROOT / "outputs"
 REPORTS = ROOT / "reports"
 SITE = ROOT / "site"
 PUBLIC_BASE = "https://ze-martin.github.io/reports"
+GITHUB_HARD_FILE_LIMIT_BYTES = 100 * 1024 * 1024
+GITHUB_SAFE_FILE_LIMIT_BYTES = 95 * 1024 * 1024
 FULL_PROTOCOL_LEAGUES = {"2", "3", "39", "281", "140", "135", "61", "48", "13", "11", "78", "71", "73", "130", "81"}
 SINGLE_LEAGUE_SCOPES = {
     "1": "world_cup",
@@ -339,7 +341,6 @@ def publish(days: list[date], message: str | None, scope: str) -> str:
     add_paths = [
         "index.html",
         "latest.html",
-        "data\\protocol_memory.sqlite",
         "AGENTS.md",
         "apis\\football_api.py",
         "db\\database.py",
@@ -350,6 +351,14 @@ def publish(days: list[date], message: str | None, scope: str) -> str:
         "tools\\generate_protocol_probabilities.py",
         "tools\\run_published_protocol.py",
     ]
+    memory_path = ROOT / "data" / "protocol_memory.sqlite"
+    if memory_path.exists() and memory_path.stat().st_size < GITHUB_SAFE_FILE_LIMIT_BYTES:
+        add_paths.append("data\\protocol_memory.sqlite")
+    elif memory_path.exists():
+        print(
+            "AVISO: data\\protocol_memory.sqlite no se agregara al commit porque pesa "
+            f"{memory_path.stat().st_size / (1024 * 1024):.2f} MB y GitHub bloquea archivos cercanos a 100 MB."
+        )
     for day in days:
         prefix = report_prefix(day, scope)
         add_paths.extend(
@@ -375,6 +384,15 @@ def publish(days: list[date], message: str | None, scope: str) -> str:
 
 
 def publish_memory_commit(days: list[date]) -> str:
+    memory_path = ROOT / "data" / "protocol_memory.sqlite"
+    if memory_path.exists() and memory_path.stat().st_size >= GITHUB_SAFE_FILE_LIMIT_BYTES:
+        print(
+            "AVISO: se omite el commit de memoria SQLite porque data\\protocol_memory.sqlite pesa "
+            f"{memory_path.stat().st_size / (1024 * 1024):.2f} MB. "
+            "La memoria queda local; los reportes HTML/CSV si se publican."
+        )
+        rev = run(["git", "rev-parse", "--short", "HEAD"])
+        return rev.stdout.strip()
     status = run(["git", "status", "--short", "--", "data\\protocol_memory.sqlite"], check=False)
     if not status.stdout.strip():
         rev = run(["git", "rev-parse", "--short", "HEAD"])
