@@ -336,6 +336,37 @@ def retry_rebase_pull(*, attempts: int = 3) -> subprocess.CompletedProcess[str]:
     return last_pull
 
 
+def stash_large_local_sqlite_for_publish(memory_path: Path) -> bool:
+    """Hide the local SQLite memory from Git when GitHub cannot accept it.
+
+    The protocol still writes to data/protocol_memory.sqlite locally, but once
+    the file is over GitHub's 100 MB hard limit it must stay out of commits.
+    Leaving it dirty makes `git pull --rebase` fail during publication. On
+    Windows, stashing this large SQLite file can fail while the file is briefly
+    locked, so mark only this tracked path as skip-worktree instead.
+    """
+    if not memory_path.exists() or memory_path.stat().st_size < GITHUB_SAFE_FILE_LIMIT_BYTES:
+        return False
+    status = run(["git", "status", "--short", "--", "data\\protocol_memory.sqlite"], check=False)
+    if not status.stdout.strip():
+        return False
+    hidden = run(["git", "update-index", "--skip-worktree", "data\\protocol_memory.sqlite"], check=False)
+    if hidden.returncode != 0:
+        print(hidden.stdout)
+        return False
+    print("AVISO: data\\protocol_memory.sqlite queda local y marcada como skip-worktree para publicar sin subirla.")
+    return False
+
+
+def restore_large_local_sqlite_after_publish(stashed: bool) -> None:
+    if not stashed:
+        return
+    pop = run(["git", "stash", "pop"], check=False)
+    print(pop.stdout)
+    if pop.returncode != 0:
+        raise RuntimeError("No se pudo restaurar data\\protocol_memory.sqlite desde el stash temporal.")
+
+
 def publish(days: list[date], message: str | None, scope: str) -> str:
     build_pages()
     add_paths = [
@@ -375,12 +406,16 @@ def publish(days: list[date], message: str | None, scope: str) -> str:
     print(commit.stdout)
     if commit.returncode != 0 and "nothing to commit" not in commit.stdout.lower():
         raise RuntimeError("No se pudo crear commit")
-    pull = retry_rebase_pull()
-    if pull.returncode != 0:
-        raise RuntimeError("git pull --rebase falló. Resolver conflictos y repetir push.")
-    push_origin_main_with_rebase_retry()
-    rev = run(["git", "rev-parse", "--short", "HEAD"])
-    return rev.stdout.strip()
+    sqlite_stashed = stash_large_local_sqlite_for_publish(memory_path)
+    try:
+        pull = retry_rebase_pull()
+        if pull.returncode != 0:
+            raise RuntimeError("git pull --rebase falló. Resolver conflictos y repetir push.")
+        push_origin_main_with_rebase_retry()
+        rev = run(["git", "rev-parse", "--short", "HEAD"])
+        return rev.stdout.strip()
+    finally:
+        restore_large_local_sqlite_after_publish(sqlite_stashed)
 
 
 def publish_memory_commit(days: list[date]) -> str:
