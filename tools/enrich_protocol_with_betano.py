@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import random
 import re
 import sys
@@ -912,12 +913,12 @@ async def run(source: Path, output: Path) -> Path:
         await page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
         links = await discover_event_links(page, matches)
         await page.close()
-        for match in matches:
+        async def scrape_match(match):
             url = links.get(match["match"])
             if not url:
                 scraped[match["match"]] = {"url": None, "odds": {}, "market_count": 0, "error": "No se encontró enlace en Betano"}
                 print(f"Betano: sin enlace para {match['match']}", flush=True)
-                continue
+                return
             print(f"Betano: scrapeando {match['match']} -> {url}", flush=True)
             event_page = await browser.new_page(
                 locale="es-PE",
@@ -942,6 +943,14 @@ async def run(source: Path, output: Path) -> Path:
                 flush=True,
             )
             await asyncio.sleep(random.uniform(1.2, 2.5))
+        concurrency = max(1, min(2, int(os.getenv("BETANO_SCRAPE_CONCURRENCY", "1"))))
+        semaphore = asyncio.Semaphore(concurrency)
+
+        async def bounded_scrape(match):
+            async with semaphore:
+                await scrape_match(match)
+
+        await asyncio.gather(*(bounded_scrape(match) for match in matches))
         await browser.close()
 
     enriched = enrich_data(data, scraped)
