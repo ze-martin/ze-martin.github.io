@@ -32,6 +32,7 @@ BETANO_DISCOVERY_URLS = [
     "https://www.betano.pe/sport/futbol/brasil/brasileirao-serie-a-betano/10016/",
     "https://www.betano.pe/sport/futbol/inglaterra/efl-cup/10215/",
     "https://www.betano.pe/sport/futbol/campeonatos/champions-league/188566/",
+    "https://www.betano.pe/sport/futbol/champions-league/partidos/182748/",
     "https://www.betano.pe/sport/futbol/campeonatos/europa-league/188567/",
     "https://www.betano.pe/sport/futbol/campeonatos/conference-league/189602/",
     "https://www.betano.pe/sport/futbol/conference-league/partidos/196755/",
@@ -60,8 +61,14 @@ BETANO_LEAGUE_DISCOVERY_URLS = {
     "liga 1": ["https://www.betano.pe/sport/futbol/peru/liga-1/17079/"],
     "league cup": ["https://www.betano.pe/sport/futbol/inglaterra/efl-cup/10215/"],
     "efl cup": ["https://www.betano.pe/sport/futbol/inglaterra/efl-cup/10215/"],
-    "uefa champions league": ["https://www.betano.pe/sport/futbol/campeonatos/champions-league/188566/"],
-    "champions league": ["https://www.betano.pe/sport/futbol/campeonatos/champions-league/188566/"],
+    "uefa champions league": [
+        "https://www.betano.pe/sport/futbol/campeonatos/champions-league/188566/",
+        "https://www.betano.pe/sport/futbol/champions-league/partidos/182748/",
+    ],
+    "champions league": [
+        "https://www.betano.pe/sport/futbol/campeonatos/champions-league/188566/",
+        "https://www.betano.pe/sport/futbol/champions-league/partidos/182748/",
+    ],
     "uefa europa league": ["https://www.betano.pe/sport/futbol/campeonatos/europa-league/188567/"],
     "europa league": ["https://www.betano.pe/sport/futbol/campeonatos/europa-league/188567/"],
     "uefa europa conference league": [
@@ -90,6 +97,7 @@ BETANO_LEAGUE_DISCOVERY_URLS = {
 }
 
 TEAM_ALIASES = {
+    "sabah fa": ["sabah fa", "fc sabah", "sabah"],
     "argentina": ["argentina"],
     "egypt": ["egypt", "egipto"],
     "switzerland": ["switzerland", "suiza"],

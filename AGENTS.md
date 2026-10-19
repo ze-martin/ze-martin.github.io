@@ -129,6 +129,7 @@ Este comando debe:
 
 - Incluir Conference League (`848`) cuando se solicite junto a Europa League (`3`). Para el 15/10/2026 la API confirma temporada `2026` en ambas. Verificar la temporada devuelta por fixtures antes de reutilizar overrides históricos `2025`.
 - Conference League en Betano: rutas verificadas `https://www.betano.pe/sport/futbol/campeonatos/conference-league/189602/` y `https://www.betano.pe/sport/futbol/conference-league/partidos/196755/`.
+- Champions League: comprobar también `https://www.betano.pe/sport/futbol/champions-league/partidos/182748/` si la página de competición no aporta enlaces. Alias verificado: `Sabah FA` = `FC Sabah`.
 
 El protocolo publicado debe usar el scoring enriquecido, no solo probabilidad simple:
 
