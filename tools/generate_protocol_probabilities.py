@@ -397,8 +397,14 @@ def build_model_audit(
 def generate(from_date: date, to_date: date, leagues: list[str], date_lima_filter: str | None = None, selected_numbers: set[int] | None = None) -> dict:
     api = FootballAPI()
     model = PoissonModel()
+    query_from, query_to = from_date, to_date
+    if (date_lima_filter and api.fixture_timezone == "America/Lima" and not api.local_file
+            and api.source == "api-football"):
+        # Fixtures are already queried in Lima time. Do not enrich the following
+        # day's fixtures only to discard them after hundreds of API requests.
+        query_from = query_to = date.fromisoformat(date_lima_filter)
     raw_matches = sorted(
-        api.get_matches(from_date, to_date, leagues),
+        api.get_matches(query_from, query_to, leagues),
         key=lambda item: (item["kickoff"], item["league"], item["home_team"], item["away_team"]),
     )
     filtered_matches: list[dict] = []
@@ -434,6 +440,19 @@ def generate(from_date: date, to_date: date, leagues: list[str], date_lima_filte
             "probability_markets": [],
             "note": None,
         }
+        fixture_state = (match.get("raw", {}).get("fixture", {}).get("status") or {})
+        status_short = fixture_state.get("short") or ""
+        result["fixture_status"] = status_short
+        result["pre_match_eligible"] = status_short in {"", "NS", "TBD"}
+        if not result["pre_match_eligible"]:
+            goals = match.get("raw", {}).get("goals") or {}
+            result["note"] = (
+                f"Estado API-Football al consultar: {status_short}, minuto {fixture_state.get('elapsed')}, "
+                f"marcador {goals.get('home')}-{goals.get('away')}. "
+                "Sin recomendaciones ni EV prepartido: el encuentro ya no está pendiente de inicio."
+            )
+            results.append(result)
+            continue
         probabilities: dict[str, float] = {}
         probability_sources: dict[str, str] = {}
         note_parts: list[str] = []
@@ -504,6 +523,7 @@ def generate(from_date: date, to_date: date, leagues: list[str], date_lima_filte
 
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
+        "api_odds_mapping_version": "exact-market-and-period-v2",
         "cache_dir": str(api.cache_dir.resolve()),
         "from_date": from_date.isoformat(),
         "to_date": to_date.isoformat(),

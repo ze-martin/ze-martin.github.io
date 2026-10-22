@@ -20,6 +20,10 @@ if hasattr(sys.stderr, "reconfigure"):
 
 BETANO_HOME = "https://www.betano.pe/"
 BETANO_DISCOVERY_URLS = [
+    "https://www.betano.pe/sport/futbol/campeonatos/uefa-europa-league/188567/",
+    "https://www.betano.pe/sport/futbol/uefa-europa-league/partidos/182761/",
+    "https://www.betano.pe/sport/futbol/campeonatos/uefa-conference-league/189602/",
+    "https://www.betano.pe/sport/futbol/uefa-conference-league/partidos/196755/",
     # League pages expose tomorrow/future events much more reliably than the
     # generic football landing page. Keep these first so the scraper finds links
     # before Betano rotates the home/today carousels.
@@ -69,9 +73,15 @@ BETANO_LEAGUE_DISCOVERY_URLS = {
         "https://www.betano.pe/sport/futbol/campeonatos/champions-league/188566/",
         "https://www.betano.pe/sport/futbol/champions-league/partidos/182748/",
     ],
-    "uefa europa league": ["https://www.betano.pe/sport/futbol/campeonatos/europa-league/188567/"],
-    "europa league": ["https://www.betano.pe/sport/futbol/campeonatos/europa-league/188567/"],
+    "uefa europa league": [
+        "https://www.betano.pe/sport/futbol/campeonatos/uefa-europa-league/188567/",
+        "https://www.betano.pe/sport/futbol/uefa-europa-league/partidos/182761/",
+        "https://www.betano.pe/sport/futbol/campeonatos/europa-league/188567/",
+    ],
+    "europa league": ["https://www.betano.pe/sport/futbol/campeonatos/uefa-europa-league/188567/"],
     "uefa europa conference league": [
+        "https://www.betano.pe/sport/futbol/campeonatos/uefa-conference-league/189602/",
+        "https://www.betano.pe/sport/futbol/uefa-conference-league/partidos/196755/",
         "https://www.betano.pe/sport/futbol/campeonatos/conference-league/189602/",
         "https://www.betano.pe/sport/futbol/conference-league/partidos/196755/",
     ],
@@ -97,6 +107,8 @@ BETANO_LEAGUE_DISCOVERY_URLS = {
 }
 
 TEAM_ALIASES = {
+    "bayer leverkusen": ["bayer leverkusen", "bayer 04 leverkusen"],
+    "union st gilloise": ["union st gilloise", "union saint gilloise", "union saint-gilloise"],
     "sabah fa": ["sabah fa", "fc sabah", "sabah"],
     "argentina": ["argentina"],
     "egypt": ["egypt", "egipto"],
@@ -168,7 +180,7 @@ TEAM_ALIASES = {
     "corinthians": ["corinthians", "sc corinthians"],
     "coritiba": ["coritiba", "coritiba fc"],
     "cruzeiro": ["cruzeiro", "cruzeiro ec"],
-    "flamengo": ["flamengo", "cr flamengo"],
+    "flamengo": ["flamengo", "cr flamengo", "flamengo rj"],
     "fluminense": ["fluminense", "fluminense rj"],
     "fortaleza ec": ["fortaleza ec", "fortaleza"],
     "gremio": ["gremio", "grêmio", "gremio fbpa", "grêmio fbpa"],
@@ -188,7 +200,7 @@ TEAM_ALIASES = {
     "racing club": ["racing club", "racing"],
     "independiente": ["independiente"],
     "san lorenzo": ["san lorenzo"],
-    "estudiantes l.p.": ["estudiantes lp", "estudiantes de la plata", "estudiantes"],
+    "estudiantes l p": ["estudiantes lp", "estudiantes de la plata", "estudiantes"],
     "estudiantes de la plata": ["estudiantes de la plata", "estudiantes lp", "estudiantes"],
     "gimnasia l.p.": ["gimnasia lp", "gimnasia la plata", "gimnasia y esgrima"],
     "gimnasia la plata": ["gimnasia la plata", "gimnasia lp", "gimnasia y esgrima"],
@@ -551,7 +563,7 @@ async def close_overlays(page) -> None:
         await asyncio.wait_for(
             page.evaluate(
                 """() => {
-                  for (const sel of ['[data-testid="landing-modal-close-button"]', '.ot-close-icon', 'button[aria-label="Cerrar"]']) {
+                  for (const sel of ['[data-testid="landing-modal-close-button"]', '.ot-close-icon', 'button[aria-label="Cerrar"]', 'button[aria-label="Close modal"]']) {
                     const el = document.querySelector(sel);
                     if (el) el.click();
                   }
@@ -889,6 +901,8 @@ async def run(source: Path, output: Path) -> Path:
     data = json.loads(source.read_text(encoding="utf-8"))
     matches: list[dict[str, str]] = []
     for result in data.get("results", []):
+        if result.get("pre_match_eligible") is False:
+            continue
         home, away = split_match_name(result["match"])
         matches.append({"match": result["match"], "home": home, "away": away, "league": result.get("league", "")})
 

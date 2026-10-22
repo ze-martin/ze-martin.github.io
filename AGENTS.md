@@ -127,6 +127,10 @@ Este comando debe:
 
 ## Mejoras obligatorias del protocolo
 
+- Desde 22/10/2026, Betano enlaza las rutas `campeonatos/uefa-europa-league/188567/`, `uefa-europa-league/partidos/182761/`, `campeonatos/uefa-conference-league/189602/` y `uefa-conference-league/partidos/196755/` bajo `https://www.betano.pe/sport/futbol/`. Preferirlas antes de las rutas antiguas sin `uefa-`, que pueden mostrar solo contenido informativo.
+
+- Al actualizar fechas de hoy, conservar los partidos iniciados/finalizados en el informe con estado y marcador al consultar, pero excluirlos de picks, combinadas y EV prepartido. El modelo prepartido no calcula probabilidades en vivo.
+
 - Incluir Conference League (`848`) cuando se solicite junto a Europa League (`3`). Para el 15/10/2026 la API confirma temporada `2026` en ambas. Verificar la temporada devuelta por fixtures antes de reutilizar overrides históricos `2025`.
 - Conference League en Betano: rutas verificadas `https://www.betano.pe/sport/futbol/campeonatos/conference-league/189602/` y `https://www.betano.pe/sport/futbol/conference-league/partidos/196755/`.
 - Champions League: comprobar también `https://www.betano.pe/sport/futbol/champions-league/partidos/182748/` si la página de competición no aporta enlaces. Alias verificado: `Sabah FA` = `FC Sabah`.
@@ -204,6 +208,7 @@ python tools\backfill_protocol_memory.py
 
 ## Reglas sobre cuotas y EV
 
+- Mapear mercados API-Football por nombre exacto y período: no permitir que `Second Half Winner`, `Corners 1x2`, BTTS de primer tiempo o goles de segundo tiempo sobrescriban mercados de partido completo. Prueba de regresión: `python tools/test_api_odds_mapping.py`. Si el bookmaker no devuelve goles totales del partido, dejar esa cuota vacía.
 - No mezclar cuotas de fuentes/casas distintas en una sola columna.
 - El HTML/CSV debe mostrar explícitamente:
   - `Book API-Football`

@@ -402,6 +402,17 @@ def build_combo_rows(rows: list[dict]) -> list[dict]:
 
 
 def write_html(rows: list[dict], summary: list[dict], data: dict, src: Path, title: str, path: Path) -> None:
+    excluded_notes = "".join(
+        f"<li><b>{html.escape(str(item.get('match', '')))}</b>: "
+        f"{html.escape(str(item.get('note') or 'Sin análisis prepartido.'))}</li>"
+        for item in data.get("results", [])
+        if item.get("pre_match_eligible") is False
+    )
+    fixture_notes = (
+        '<section class="card"><h2>Partidos fuera del análisis prepartido</h2>'
+        f"<ul>{excluded_notes}</ul></section>"
+        if excluded_notes else ""
+    )
     summary_keys = [
         "hora",
         "partido",
@@ -551,6 +562,7 @@ th{{position:sticky;top:0;background:#18233a;z-index:2;color:#cfe0ff;cursor:poin
   <div class="meta">Generado: {html.escape(datetime.now().strftime("%Y-%m-%d %H:%M"))} · Fuente: {html.escape(str(src))} · {len(summary)} partidos · {len(rows)} mercados</div>
 </header>
 <main>
+  {fixture_notes}
   <section class="card">
     <h2>Resumen</h2>
     <div class="kpis">

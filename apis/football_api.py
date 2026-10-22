@@ -300,40 +300,38 @@ class FootballAPI:
             values = bet.get("values", [])
             if not values:
                 continue
-            if any(token in name for token in ("match winner", "1x2", "winner")):
+            # Exact names prevent period/team/corner markets overwriting full-time goals.
+            if name in {"match winner", "1x2"}:
                 self._parse_match_winner_markets(markets, values)
-            elif "double chance" in name:
+            elif name == "double chance":
                 self._parse_double_chance_markets(markets, values)
-            elif "draw no bet" in name:
+            elif name == "draw no bet":
                 self._parse_draw_no_bet_markets(markets, values)
-            elif "both teams score" in name:
+            elif name in {"both teams score", "both teams to score"}:
                 self._parse_yes_no_markets(markets, values, "BTTS")
-            elif (
-                any(token in name for token in ("first half", "1st half", "1st-half", "1st_half"))
-                and any(token in name for token in ("goals over/under", "goals over under", "over/under", "total goals"))
-            ):
+            elif name in {"goals over/under first half", "goals over/under - first half", "goals over/under (1st half)", "goals over/under 1st half"}:
                 self._parse_over_under_markets(markets, values, "FIRST_HALF_TOTALS")
-            elif any(token in name for token in ("goals over/under", "goals over under", "over/under")) and "corners" not in name and "cards" not in name and "shots" not in name:
+            elif name in {"goals over/under", "goals over under", "over/under", "total goals"}:
                 self._parse_over_under_markets(markets, values, "TOTALS")
-            elif any(token in name for token in ("home team over/under", "home team over under")):
+            elif name in {"home team over/under", "home team over under"}:
                 self._parse_over_under_markets(markets, values, "TEAM_TOTAL_HOME")
-            elif any(token in name for token in ("away team over/under", "away team over under")):
+            elif name in {"away team over/under", "away team over under"}:
                 self._parse_over_under_markets(markets, values, "TEAM_TOTAL_AWAY")
-            elif "corners over under" in name:
+            elif name in {"corners over under", "corners over/under"}:
                 self._parse_over_under_markets(markets, values, "CORNERS_TOTALS")
-            elif "home corners over/under" in name or "home corners over under" in name:
+            elif name in {"home corners over/under", "home corners over under"}:
                 self._parse_over_under_markets(markets, values, "CORNERS_HOME")
-            elif "away corners over/under" in name or "away corners over under" in name:
+            elif name in {"away corners over/under", "away corners over under"}:
                 self._parse_over_under_markets(markets, values, "CORNERS_AWAY")
-            elif "cards over/under" in name or "cards over under" in name:
+            elif name in {"cards over/under", "cards over under"}:
                 self._parse_over_under_markets(markets, values, "CARDS_TOTALS")
-            elif "home team total cards" in name:
+            elif name == "home team total cards":
                 self._parse_over_under_markets(markets, values, "CARDS_HOME")
-            elif "away team total cards" in name:
+            elif name == "away team total cards":
                 self._parse_over_under_markets(markets, values, "CARDS_AWAY")
-            elif "shots on goal over/under" in name or "shots on goal over under" in name:
+            elif name in {"shots on goal over/under", "shots on goal over under"}:
                 self._parse_over_under_markets(markets, values, "SHOTS_ON_TARGET_TOTAL")
-            elif "shots over/under" in name or "shots over under" in name:
+            elif name in {"shots over/under", "shots over under"}:
                 self._parse_over_under_markets(markets, values, "SHOTS_TOTAL")
         return {"bookmaker": bookmaker.get("name", "API-Football"), "markets": markets} if markets else None
 
@@ -351,7 +349,8 @@ class FootballAPI:
                 markets["1X2:AWAY"] = odd
 
     def _parse_double_chance_markets(self, markets: dict[str, float], values: list[dict[str, Any]]) -> None:
-        mapping = {"1x": "DOUBLE_CHANCE:1X", "x2": "DOUBLE_CHANCE:X2", "12": "DOUBLE_CHANCE:12"}
+        mapping = {"1x": "DOUBLE_CHANCE:1X", "x2": "DOUBLE_CHANCE:X2", "12": "DOUBLE_CHANCE:12",
+                   "home/draw": "DOUBLE_CHANCE:1X", "draw/away": "DOUBLE_CHANCE:X2", "home/away": "DOUBLE_CHANCE:12"}
         for value in values:
             label = str(value.get("value", "")).strip().lower().replace(" ", "")
             odd = self._float(str(value.get("odd", "")))
