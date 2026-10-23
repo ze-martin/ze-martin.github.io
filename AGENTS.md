@@ -223,6 +223,8 @@ python tools\backfill_protocol_memory.py
 
 ## Scraping Betano
 
+- Si el feed de eventos de competición devuelve HTTP 403, no eludir ni repetir el acceso mediante rutas alternativas. Registrar la limitación y marcar los partidos sin cuota como `Betano no verificado (HTTP 403)`, sin afirmar que la casa no ofrece el partido. Se pueden conservar las cuotas verificadas en páginas públicas accesibles.
+
 El scraper operativo está en:
 
 ```text

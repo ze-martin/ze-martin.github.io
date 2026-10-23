@@ -1,13 +1,15 @@
 """Regression checks for full-time versus period/team API prices."""
 import sys
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, AsyncMock
+from types import SimpleNamespace
 from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from apis.football_api import FootballAPI
 from tools.generate_protocol_probabilities import generate
+from tools.enrich_protocol_with_betano import betano_coverage_status, discover_event_links, BETANO_HOME
 
 
 class OddsMappingTest(unittest.TestCase):
@@ -72,6 +74,36 @@ class FixtureEligibilityTest(unittest.TestCase):
         self.assertEqual(row["all_markets"], [])
         self.assertIsNone(row["recommended_pick"])
         self.assertIn("0-1", row["note"])
+
+
+class BetanoDenialTest(unittest.IsolatedAsyncioTestCase):
+    async def test_denied_feed_is_not_retried_on_other_competitions(self):
+        class Page:
+            context = SimpleNamespace(browser=None)
+
+            def __init__(self):
+                self.visited = []
+                self.handlers = []
+
+            def on(self, event, handler):
+                self.handlers.append(handler)
+
+            async def goto(self, url, **kwargs):
+                self.visited.append(url)
+                if url != BETANO_HOME:
+                    for handler in self.handlers:
+                        handler(SimpleNamespace(status=403, url='https://www.betano.pe/api/league/hot/upcoming'))
+
+            async def wait_for_timeout(self, ms):
+                pass
+
+        page = Page()
+        routes = ['https://www.betano.pe/sport/futbol/test-one/', 'https://www.betano.pe/sport/futbol/test-two/', BETANO_HOME]
+        with patch('tools.enrich_protocol_with_betano.discovery_urls_for_matches', return_value=routes), patch('tools.enrich_protocol_with_betano.collect_event_links_from_page', new=AsyncMock(return_value=[])):
+            await discover_event_links(page, [{'match': 'A vs B', 'home': 'A', 'away': 'B'}])
+        self.assertEqual(page.visited, [routes[0], BETANO_HOME])
+        self.assertEqual(page._betano_discovery_denied_paths, ['/api/league/hot/upcoming'])
+        self.assertEqual(betano_coverage_status({'error': 'HTTP 403'}, []), 'Betano no verificado (HTTP 403)')
 
 
 if __name__ == "__main__":
