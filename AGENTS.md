@@ -181,6 +181,7 @@ La carpeta pública `reports/` puede conservar variantes históricas o de alcanc
 - `analysis/calibration.py` genera diagnóstico con separación temporal; no aplicar la corrección histórica al modelo nuevo. Su activación requiere validación prospectiva por versión y familia.
 - `services/player_markets.py` y `tools/enrich_player_options.py` construyen observaciones de jugadores: seis encuentros previos, minutos, goles, asistencias, remates, tiros al arco y amarillas. Mostrar muestras y escenarios condicionales a minutos, no probabilidad calibrada/EV. Cuotas individuales exactas muestran la casa real; no mapear etiquetas ambiguas ni inventar Betano. No contar observaciones individuales en aciertos principales.
 - Público: `dashboard.html` usa `outputs/dashboard_data.json` y `outputs/performance_summary.json` sin tickets privados. `tools/build_pages_site.py` lo recompila y GitHub Actions conserva los datos portables; publicar los JSON, plantilla y dashboard junto a los reportes. Mantener el archivo de informes con una fila por día.
+- Privacidad: `data/protocol_memory.sqlite` y sus respaldos son exclusivamente locales y están ignorados por Git. No publicarlos aunque pesen menos de 100 MB. El dashboard público usa únicamente datos de pronósticos y agregados sin tickets ni importes reales. Retirar el archivo del índice de Git preservando la copia local cuando una instalación antigua lo tenga versionado.
 - Pruebas: `python tools/test_protocol_v2.py` y `python tools/test_api_odds_mapping.py`.
 
 El flujo completo debe persistirse en base de datos.

@@ -415,13 +415,8 @@ def publish(days: list[date], message: str | None, scope: str) -> str:
         'tools/supplement_protocol_betano.py', '.github/workflows/deploy-pages.yml', '.gitignore',
     ]
     memory_path = ROOT / "data" / "protocol_memory.sqlite"
-    if memory_path.exists() and memory_path.stat().st_size < GITHUB_SAFE_FILE_LIMIT_BYTES:
-        add_paths.append("data\\protocol_memory.sqlite")
-    elif memory_path.exists():
-        print(
-            "AVISO: data\\protocol_memory.sqlite no se agregara al commit porque pesa "
-            f"{memory_path.stat().st_size / (1024 * 1024):.2f} MB y GitHub bloquea archivos cercanos a 100 MB."
-        )
+    if memory_path.exists():
+        print('SQLite permanece local por privacidad: contiene memoria y puede contener tickets reales. Solo se publican agregados sanitizados.')
     for day in days:
         prefix = report_prefix(day, scope)
         if (OUTPUTS / f'{prefix}_jugadores.csv').exists():
@@ -453,29 +448,7 @@ def publish(days: list[date], message: str | None, scope: str) -> str:
 
 
 def publish_memory_commit(days: list[date]) -> str:
-    memory_path = ROOT / "data" / "protocol_memory.sqlite"
-    if memory_path.exists() and memory_path.stat().st_size >= GITHUB_SAFE_FILE_LIMIT_BYTES:
-        print(
-            "AVISO: se omite el commit de memoria SQLite porque data\\protocol_memory.sqlite pesa "
-            f"{memory_path.stat().st_size / (1024 * 1024):.2f} MB. "
-            "La memoria queda local; los reportes HTML/CSV si se publican."
-        )
-        rev = run(["git", "rev-parse", "--short", "HEAD"])
-        return rev.stdout.strip()
-    status = run(["git", "status", "--short", "--", "data\\protocol_memory.sqlite"], check=False)
-    if not status.stdout.strip():
-        rev = run(["git", "rev-parse", "--short", "HEAD"])
-        return rev.stdout.strip()
-    run(["git", "add", "--", "data\\protocol_memory.sqlite"])
-    day_text = ", ".join(day.isoformat() for day in days)
-    commit = run(["git", "commit", "-m", f"Actualizar memoria commit protocolos {day_text}"], check=False)
-    print(commit.stdout)
-    if commit.returncode != 0 and "nothing to commit" not in commit.stdout.lower():
-        raise RuntimeError("No se pudo crear commit de memoria")
-    pull = retry_rebase_pull()
-    if pull.returncode != 0:
-        raise RuntimeError("git pull --rebase falló al publicar memoria.")
-    push_origin_main_with_rebase_retry()
+    print('La memoria SQLite y los tickets se conservan localmente, nunca en el repositorio público.')
     rev = run(["git", "rev-parse", "--short", "HEAD"])
     return rev.stdout.strip()
 

@@ -1,5 +1,6 @@
 .env
 .venv/
+data/protocol_memory.sqlite*
 __pycache__/
 *.pyc
 *.log
