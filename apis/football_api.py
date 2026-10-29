@@ -234,7 +234,7 @@ class FootballAPI:
 
     def _has_complete_team_stats(self, stats: dict[str, Any]) -> bool:
         try:
-            return int(stats.get("home", {}).get("matches") or 0) > 0 and int(stats.get("away", {}).get("matches") or 0) > 0
+            return int(stats.get("home", {}).get("matches") or 0) >= 6 and int(stats.get("away", {}).get("matches") or 0) >= 6
         except (TypeError, ValueError):
             return False
 
@@ -309,6 +309,13 @@ class FootballAPI:
                 self._parse_draw_no_bet_markets(markets, values)
             elif name in {"both teams score", "both teams to score"}:
                 self._parse_yes_no_markets(markets, values, "BTTS")
+            elif name == 'results/both teams score':
+                for value in values:
+                    selection = str(value.get('value','')).strip().lower()
+                    mapping = {'home/yes':'HOME_YES','home/no':'HOME_NO','away/yes':'AWAY_YES','away/no':'AWAY_NO'}
+                    odd = self._float(str(value.get('odd','')))
+                    if selection in mapping and odd and odd > 1:
+                        markets['WIN_BTTS:' + mapping[selection]] = odd
             elif name in {"goals over/under first half", "goals over/under - first half", "goals over/under (1st half)", "goals over/under 1st half"}:
                 self._parse_over_under_markets(markets, values, "FIRST_HALF_TOTALS")
             elif name in {"goals over/under", "goals over under", "over/under", "total goals"}:
@@ -532,7 +539,7 @@ class FootballAPI:
             return []
         response = self._safe_api_response(
             "fixtures",
-            {"team": team_id, "league": league_id, "season": season, "last": 5},
+            {"team": team_id, "league": league_id, "season": season, "last": 10},
             f"recent fixtures team {team_id}",
         )
         return sorted(response, key=lambda item: item.get("fixture", {}).get("date", ""), reverse=True)
@@ -548,7 +555,7 @@ class FootballAPI:
         completed = [
             item
             for item in response
-            if item.get("goals", {}).get("home") is not None and item.get("goals", {}).get("away") is not None
+            if item.get('fixture', {}).get('status', {}).get('short') in {'FT','AET','PEN'} and item.get("goals", {}).get("home") is not None and item.get("goals", {}).get("away") is not None
         ]
         return sorted(completed, key=lambda item: item.get("fixture", {}).get("date", ""), reverse=True)
 
@@ -692,6 +699,7 @@ class FootballAPI:
         total_goals = float(goals_for.get("total", {}).get("total") or 0)
         recent = self._aggregate_fixture_statistics(recent_stats, team_id)
         return {
+            'samples': recent.get('samples', 0),
             "goals_for_total": total_goals,
             "goals_for_avg": float(goals_for.get("average", {}).get("total") or 0),
             "goals_per_match": round(total_goals / total_played, 3) if total_played else None,
@@ -712,6 +720,7 @@ class FootballAPI:
         failed_to_score = stats.get("failed_to_score", {})
         recent = self._aggregate_fixture_statistics(recent_stats, team_id)
         return {
+            'samples': recent.get('samples', 0),
             "goals_against_total": total_goals,
             "goals_against_avg": float(goals_against.get("average", {}).get("total") or 0),
             "goals_against_per_match": round(total_goals / total_played, 3) if total_played else None,

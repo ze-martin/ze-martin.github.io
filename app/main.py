@@ -14,6 +14,14 @@ load_environment()
 app = FastAPI(title="Sistema de Apuestas", version="1.0.0")
 
 
+@app.get('/audit/performance')
+def audit_performance() -> dict:
+    from db.performance_store import PerformanceStore
+    store = PerformanceStore()
+    store.initialize()
+    return store.public_summary()
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}

@@ -7,6 +7,12 @@ on:
     paths:
       - "outputs/**/*.html"
       - "outputs/**/*.csv"
+      - "outputs/dashboard_data.json"
+      - "outputs/performance_summary.json"
+      - "dashboard/public.html"
+      - "analysis/**/*.py"
+      - "tools/**/*.py"
+      - "db/performance_store.py"
       - "tools/build_pages_site.py"
       - ".github/workflows/deploy-pages.yml"
   workflow_dispatch:
@@ -31,6 +37,11 @@ jobs:
       - name: Build static Pages site
         run: python tools/build_pages_site.py
 
+      - name: Validate model, selection and audit regressions
+        run: |
+          python tools/test_protocol_v2.py
+          python tools/test_api_odds_mapping.py
+
       - name: Copy generated site to repository root
         run: |
           cp -R site/. .
@@ -39,7 +50,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add index.html latest.html reports/
+          git add index.html latest.html reports/ dashboard.html performance_summary.json
           if git diff --cached --quiet; then
             echo "No generated Pages changes."
           else

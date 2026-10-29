@@ -1,0 +1,122 @@
+{
+  "scope": "Un pick principal por partido y versión; no son apuestas reales. Históricos recuperados no prueban primera publicación.",
+  "groups": [
+    {
+      "model_version": "legacy-exact-v1",
+      "role": "principal",
+      "n": 184,
+      "won": 117,
+      "lost": 67,
+      "pending": 19,
+      "void": 0,
+      "hit_rate": 0.6358695652173914,
+      "brier": 0.24359254978260872,
+      "expected": 0.766008695652174,
+      "houses": {
+        "William Hill · API": {
+          "n": 167,
+          "profit_units": -19.81,
+          "roi": -0.11862275449101796
+        },
+        "Betano · Betano": {
+          "n": 18,
+          "profit_units": 2.87,
+          "roi": 0.15944444444444444
+        },
+        "Bet365 · API": {
+          "n": 1,
+          "profit_units": -1.0,
+          "roi": -1.0
+        }
+      },
+      "reliability": [
+        {
+          "range": "0%–60%",
+          "n": 17,
+          "predicted": 0.5598705882352941,
+          "observed": 0.35294117647058826
+        },
+        {
+          "range": "60%–70%",
+          "n": 19,
+          "predicted": 0.6525894736842105,
+          "observed": 0.5789473684210527
+        },
+        {
+          "range": "70%–80%",
+          "n": 88,
+          "predicted": 0.7656340909090908,
+          "observed": 0.6818181818181818
+        },
+        {
+          "range": "80%–90%",
+          "n": 47,
+          "predicted": 0.8380872340425531,
+          "observed": 0.6808510638297872
+        },
+        {
+          "range": "90%–100%",
+          "n": 13,
+          "predicted": 0.9432846153846154,
+          "observed": 0.6153846153846154
+        }
+      ]
+    },
+    {
+      "model_version": "poisson-shrink-v2|selection-v2",
+      "role": "principal",
+      "n": 0,
+      "won": 0,
+      "lost": 0,
+      "pending": 10,
+      "void": 0,
+      "hit_rate": null,
+      "brier": null,
+      "expected": null,
+      "houses": {},
+      "reliability": []
+    },
+    {
+      "model_version": "poisson-shrink-v2|selection-v2",
+      "role": "alternativa",
+      "n": 0,
+      "won": 0,
+      "lost": 0,
+      "pending": 1,
+      "void": 0,
+      "hit_rate": null,
+      "brier": null,
+      "expected": null,
+      "houses": {},
+      "reliability": []
+    }
+  ],
+  "updated_at": "2026-10-29T18:37:18.460187+00:00",
+  "calibration_diagnostics": {
+    "legacy-exact-v1": {
+      "active": false,
+      "train_n": 127,
+      "test_n": 57,
+      "train_end": "2026-10-25",
+      "test_start": "2026-10-27",
+      "test_end": "2026-10-28",
+      "intercept": -0.23870434362556528,
+      "slope": 0.6739333344241162,
+      "raw": {
+        "brier": 0.2610067729824561,
+        "log_loss": 0.783362423245593
+      },
+      "candidate": {
+        "brier": 0.2419028447566911,
+        "log_loss": 0.691644532193415
+      },
+      "improves_holdout": true,
+      "reason": "Diagnóstico, no corrección activa: validar por familia y versión con snapshots prospectivos; no transferir al modelo v2"
+    },
+    "poisson-shrink-v2|selection-v2": {
+      "active": false,
+      "reason": "Se necesitan al menos cuatro fechas cerradas independientes"
+    }
+  },
+  "errors": []
+}

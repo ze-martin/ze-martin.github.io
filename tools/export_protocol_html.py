@@ -8,6 +8,10 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+from analysis.policy import apply_policy, compatible_keys
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -15,6 +19,17 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 REPLACEMENTS = [
+    ('WIN_BTTS HOME.YES','Gana local y ambos anotan'),
+    ('WIN_BTTS HOME.NO','Gana local y no anotan ambos'),
+    ('WIN_BTTS AWAY.YES','Gana visita y ambos anotan'),
+    ('WIN_BTTS AWAY.NO','Gana visita y no anotan ambos'),
+    ('CLEAN_SHEET HOME.YES','Local mantiene portería a cero'),
+    ('CLEAN_SHEET HOME.NO','Local recibe gol'),
+    ('CLEAN_SHEET AWAY.YES','Visita mantiene portería a cero'),
+    ('CLEAN_SHEET AWAY.NO','Visita recibe gol'),
+    ('TOTAL_RANGE 1.3','Entre 1 y 3 goles'),
+    ('TOTAL_RANGE 2.3','Entre 2 y 3 goles'),
+    ('TOTAL_RANGE 2.4','Entre 2 y 4 goles'),
     ("CARDS_TOTALS OVER.", "Tarjetas total +"),
     ("CARDS_TOTALS UNDER.", "Tarjetas total -"),
     ("CARDS_HOME OVER.", "Local tarjetas +"),
@@ -42,6 +57,9 @@ REPLACEMENTS = [
     ("1X2 AWAY", "Gana visita"),
     ("BTTS YES", "BTTS sí"),
     ("BTTS NO", "BTTS no"),
+    ("DOUBLE_CHANCE 1X", "Local o empate"),
+    ("DOUBLE_CHANCE X2", "Visita o empate"),
+    ("DOUBLE_CHANCE 12", "Sin empate (1 o 2)"),
 ]
 
 
@@ -170,7 +188,7 @@ def build_rows(data: dict) -> tuple[list[dict], list[dict], dict[str, list[dict]
         audit_fields = result_audit(result)
         rec = result.get("recommended_pick") or {}
         markets = result.get("all_markets", [])
-        if not rec:
+        if not rec and data.get('selection_policy') != 'selection-v2':
             betano_candidates = [
                 market
                 for market in markets
@@ -196,7 +214,7 @@ def build_rows(data: dict) -> tuple[list[dict], list[dict], dict[str, list[dict]
             {
                 "hora": result.get("time_lima", ""),
                 "partido": result.get("match", ""),
-                "pick": clean(rec.get("market")),
+                "pick": clean(rec.get("market")) if rec else 'Sin apuesta',
                 "prob": pct(rec.get("probability")),
                 "cuota_justa": money(rec.get("fair_odds")),
                 "cuota_api": money(numeric(rec, "odds_api", "odds")),
@@ -204,7 +222,7 @@ def build_rows(data: dict) -> tuple[list[dict], list[dict], dict[str, list[dict]
                 "cuota_betano": money(rec.get("odds_betano")),
                 "ev_betano": money(rec.get("ev_betano")),
                 "score": money(rec.get("combined_recommendation_score") or rec.get("recommendation_score")),
-                "perfil": rec.get("recommendation_tier") or "",
+                "perfil": rec.get("recommendation_tier") or 'Sin apuesta',
                 "cobertura_betano": result.get("betano_coverage_status") or "",
                 "mercados": len(markets),
                 "con_api": len(with_api_odds),
@@ -238,6 +256,11 @@ def build_rows(data: dict) -> tuple[list[dict], list[dict], dict[str, list[dict]
                     "pick": clean(market.get("market")),
                     "market_original": market.get("market") or "",
                     "key": market.get("key") or "",
+                    "rol_seleccion": market.get('selection_role') or 'Solo análisis',
+                    "motivo_seleccion": '; '.join(market.get('selection_reasons') or []),
+                    "calibracion": market.get('calibration_status') or 'No validada',
+                    'casa_sugerida': market.get('selection_bookmaker') or '',
+                    'cuota_sugerida': market.get('selection_odds') or '',
                     "probabilidad": pct(market.get("probability")),
                     "prob_num": dec(market.get("probability")),
                     "cuota_justa": money(market.get("fair_odds")),
@@ -292,6 +315,11 @@ def write_csv(rows: list[dict], path: Path) -> None:
         "pick",
         "market_original",
         "key",
+        "rol_seleccion",
+        "motivo_seleccion",
+        "calibracion",
+        'casa_sugerida',
+        'cuota_sugerida',
         "probabilidad",
         "prob_num",
         "cuota_justa",
@@ -336,6 +364,19 @@ def write_csv(rows: list[dict], path: Path) -> None:
         writer.writerows(rows)
 
 
+def write_player_csv(data, path):
+    fields=['fecha','partido','jugador','mercado','apariciones','minutos','ultimas_3_apariciones','por_90',
+            'p_si_juega_60','p_si_juega_90','bookmaker_api','cuota_api','cuota_betano','titular_confirmado','muestra_suficiente','estado']
+    with path.open('w',encoding='utf-8-sig',newline='') as f:
+        writer=csv.DictWriter(f,fieldnames=fields);writer.writeheader()
+        for match in data.get('results',[]):
+            for p in (match.get('player_analysis') or {}).get('options',[]):
+                for quote in p.get('api_quotes') or [{}]:
+                    writer.writerow(dict(zip(fields,[match.get('date_lima'),match['match'],p['player'],p['market'],
+                        p['appearances'],p['minutes'],p['last3'],p['per90'],p['p_if_60_minutes'],p['p_if_90_minutes'],
+                        quote.get('bookmaker'),quote.get('odds'),None,p['starter_confirmed'],p['sample_sufficient'],p['status']])))
+
+
 def ev_class(row: dict) -> str:
     values = []
     for key in ("ev_api_num", "ev_betano_num"):
@@ -360,6 +401,8 @@ def as_number(value: Any, default: float = -999.0) -> float:
 def build_combo_rows(rows: list[dict]) -> list[dict]:
     grouped: dict[str, list[dict]] = {}
     for row in rows:
+        if row.get('rol_seleccion') != 'Alternativa':
+            continue
         if not row.get("cuota_api") and not row.get("cuota_betano"):
             continue
         if row.get("perfil_pick") == "Evitar":
@@ -370,7 +413,7 @@ def build_combo_rows(rows: list[dict]) -> list[dict]:
 
     combo: list[dict] = []
     for match, items in grouped.items():
-        selected = sorted(
+        ranked = sorted(
             items,
             key=lambda row: (
                 as_number(row.get("score_num")),
@@ -379,7 +422,13 @@ def build_combo_rows(rows: list[dict]) -> list[dict]:
                 as_number(row.get("ev_api_num")),
             ),
             reverse=True,
-        )[:4]
+        )
+        selected = []
+        for row in ranked:
+            if compatible_keys([r['key'] for r in selected]+[row['key']]):
+                selected.append(row)
+            if len(selected) == 2:
+                break
         for idx, row in enumerate(selected, 1):
             combo.append(
                 {
@@ -402,6 +451,16 @@ def build_combo_rows(rows: list[dict]) -> list[dict]:
 
 
 def write_html(rows: list[dict], summary: list[dict], data: dict, src: Path, title: str, path: Path) -> None:
+    player_rows = []
+    for match in data.get('results', []):
+        for player in (match.get('player_analysis') or {}).get('options', []):
+            quotes = '; '.join(f"{q['bookmaker']}: {q['odds']:.2f}" for q in player.get('api_quotes', [])) or 'Sin cuota equivalente'
+            values = [match['match'],player['player'],player['market'],player['appearances'],player['minutes'],
+                      player['last3'],player['per90'],f"60 min: {player['p_if_60_minutes']:.1%} / 90 min: {player['p_if_90_minutes']:.1%}",
+                      quotes,'Sí' if player['starter_confirmed'] is True else 'No' if player['starter_confirmed'] is False else 'No confirmada',
+                      'Suficiente para observar' if player['sample_sufficient'] else 'Muestra pequeña',player['status']]
+            player_rows.append('<tr>'+''.join('<td>'+html.escape(str(v))+'</td>' for v in values)+'</tr>')
+    players_html = ''.join(player_rows) or '<tr><td colspan="12">Sin datos individuales en este informe. No se inventan estadísticas ni cuotas.</td></tr>'
     excluded_notes = "".join(
         f"<li><b>{html.escape(str(item.get('match', '')))}</b>: "
         f"{html.escape(str(item.get('note') or 'Sin análisis prepartido.'))}</li>"
@@ -497,6 +556,7 @@ def write_html(rows: list[dict], summary: list[dict], data: dict, src: Path, tit
             idx,
             row["hora"],
             row["partido"],
+            row.get('rol_seleccion', 'Solo análisis'),
             row["pick"],
             row["probabilidad"],
             row["cuota_justa"],
@@ -542,6 +602,7 @@ def write_html(rows: list[dict], summary: list[dict], data: dict, src: Path, tit
 :root{{--bg:#0b1020;--panel:#121a2c;--line:#26344f;--text:#e9eefb;--muted:#9fb0d0}}
 body{{margin:0;font-family:Inter,Segoe UI,system-ui,Arial,sans-serif;background:var(--bg);color:var(--text)}}
 header{{padding:24px 28px;border-bottom:1px solid var(--line);background:linear-gradient(135deg,#101a34,#0b1020);position:sticky;top:0;z-index:4}}
+.tabs{{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0}}.tabs button{{padding:10px 14px;cursor:pointer;border-radius:8px;background:#203253;color:white;border:1px solid #58a6ff}}.panel[hidden]{{display:none}}.guide{{line-height:1.7;font-size:14px}}
 h1{{margin:0 0 8px;font-size:24px}}h2{{margin-top:0}}.meta,.small{{color:var(--muted);font-size:12px}}
 main{{padding:22px 28px 50px}}.card{{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:18px;box-shadow:0 10px 30px rgba(0,0,0,.18)}}
 .controls{{display:grid;grid-template-columns:2fr 1.3fr 1fr 1fr;gap:10px;align-items:end}}label{{display:block;color:var(--muted);font-size:12px;margin-bottom:5px}}
@@ -559,12 +620,21 @@ th{{position:sticky;top:0;background:#18233a;z-index:2;color:#cfe0ff;cursor:poin
 <body>
 <header>
   <h1>{html.escape(title)}</h1>
-  <div class="meta">Generado: {html.escape(datetime.now().strftime("%Y-%m-%d %H:%M"))} · Fuente: {html.escape(str(src))} · {len(summary)} partidos · {len(rows)} mercados</div>
+  <div class="meta">Generado: {html.escape(datetime.now().strftime("%Y-%m-%d %H:%M"))} · Modelo: {html.escape(data.get('model_version','legacy-exact-v1'))} · Selección v2 · {len(summary)} partidos · {len(rows)} mercados</div>
 </header>
 <main>
+  <section class="card guide"><a href="../dashboard.html">Dashboard y resultados históricos</a> · <a href="{html.escape(path.stem)}_jugadores.csv">CSV jugadores</a><br>
+  <b>¿Qué cuenta como acierto?</b> Un pick principal por partido y versión del modelo. No se cuentan todos los mercados ni tus apuestas reales.
+  <br>★ Principal = candidato provisional con muestra y EV mínimos. Alternativas = opciones para elegir, no para sumar automáticamente.
+  Solo análisis = no reúne las condiciones. Sin apuesta = no existe candidato elegible. Ningún pick es seguro; las probabilidades no están calibradas todavía.
+  <br>La política v2 de selección no convierte las probabilidades históricas en un modelo nuevo ni modifica sus resultados ya congelados.</section>
+  <nav class="tabs" aria-label="Vistas del protocolo">
+    <button onclick="viewPanel('principales')">★ Principales</button><button onclick="viewPanel('alternativas')">Alternativas</button>
+    <button onclick="viewPanel('mercados')">Todos los mercados</button><button onclick="viewPanel('jugadores')">Jugadores · observación</button><button onclick="viewPanel('auditoria')">Auditoría</button>
+  </nav>
   {fixture_notes}
-  <section class="card">
-    <h2>Resumen</h2>
+  <section class="card panel" data-view="principales">
+    <h2>Pick principal por partido · o Sin apuesta</h2>
     <div class="kpis">
       <div class="kpi"><span class="small">Partidos</span><b>{len(summary)}</b></div>
       <div class="kpi"><span class="small">Mercados</span><b>{len(rows)}</b></div>
@@ -579,7 +649,7 @@ th{{position:sticky;top:0;background:#18233a;z-index:2;color:#cfe0ff;cursor:poin
       </table>
     </div>
   </section>
-  <section class="card">
+  <section class="card panel" data-view="auditoria" hidden>
     <h2>Auditoría del modelo: últimos partidos usados</h2>
     <p class="small">Esta tabla muestra los partidos recientes que alimentaron el cálculo por equipo. Si el torneo actual no tiene muestra suficiente, el modelo usa fallback multi-competición; por ejemplo Liga, copas y amistosos recientes disponibles en API-Football.</p>
     <div class="tablewrap" style="max-height:58vh">
@@ -589,9 +659,9 @@ th{{position:sticky;top:0;background:#18233a;z-index:2;color:#cfe0ff;cursor:poin
       </table>
     </div>
   </section>
-  <section class="card">
-    <h2>Vista combinada sugerida</h2>
-    <p class="small">Selecciona 3 o 4 picks por partido desde esta vista. El score premia mercados más apostables, probabilidad, EV y confirmación Betano; penaliza tiros/tarjetas y cuotas API demasiado alejadas de la cuota justa.</p>
+  <section class="card panel" data-view="alternativas" hidden>
+    <h2>Alternativas · Vista combinada sugerida en revisión</h2>
+    <p class="small">Hasta dos candidatos de familias distintas. Son opciones para elegir: no una combinada validada ni una probabilidad conjunta. No se exige completar picks por partido.</p>
     <div class="tablewrap" style="max-height:55vh">
       <table id="combo">
         <thead><tr><th>Partido</th><th>#</th><th>Pick</th><th>Perfil</th><th>Prob</th><th>Cuota justa</th><th>Book API-Football</th><th>Cuota API-Football</th><th>EV API-Football</th><th>Cuota Betano</th><th>EV Betano</th><th>Score</th><th>Alerta</th></tr></thead>
@@ -599,7 +669,11 @@ th{{position:sticky;top:0;background:#18233a;z-index:2;color:#cfe0ff;cursor:poin
       </table>
     </div>
   </section>
-  <section class="card">
+  <section class="card panel" data-view="jugadores" hidden><h2>Jugadores · racha y rendimiento</h2>
+    <p class="small">Observación, no picks principales. Últimos seis partidos, métricas por 90 minutos y escenarios condicionados a jugar 60/90 minutos. No son probabilidades calibradas del partido ni EV. Confirmar titularidad, lesiones, minutos y reglas antes de valorar una apuesta.</p>
+    <div class="tablewrap"><table><thead><tr><th>Partido</th><th>Jugador</th><th>Mercado</th><th>Partidos</th><th>Minutos</th><th>Total últimos 3</th><th>Por 90</th><th>Escenarios exploratorios</th><th>Cuotas API y casa</th><th>Titular</th><th>Muestra</th><th>Estado</th></tr></thead><tbody>{players_html}</tbody></table></div>
+  </section>
+  <section class="card panel" data-view="mercados" hidden>
     <h2>Todos los mercados</h2>
     <div class="controls">
       <div><label>Buscar</label><input id="q" placeholder="Ej: corners, goles +1.5, Argentina"></div>
@@ -610,13 +684,14 @@ th{{position:sticky;top:0;background:#18233a;z-index:2;color:#cfe0ff;cursor:poin
     <p class="small"><span class="badge">Tip</span> Click en encabezados para ordenar. Verde = EV positivo en API-Football o Betano.</p>
     <div class="tablewrap">
       <table id="markets">
-        <thead><tr><th>#</th><th>Hora</th><th>Partido</th><th>Pick</th><th>Prob</th><th>Cuota justa</th><th>Score</th><th>Perfil</th><th>Book API-Football</th><th>Cuota API-Football</th><th>EV API-Football</th><th>Dif API-justa</th><th>Ratio API/justa</th><th>Book Betano</th><th>Cuota Betano</th><th>EV Betano</th><th>Dif Betano-justa</th><th>Ratio Betano/justa</th><th>Estado API-Football</th><th>Estado Betano</th><th>Cobertura Betano</th><th>Alerta</th><th>Confianza</th><th>Fuente</th><th>Riesgo</th></tr></thead>
+        <thead><tr><th>#</th><th>Hora</th><th>Partido</th><th>Rol</th><th>Pick</th><th>Prob</th><th>Cuota justa</th><th>Score</th><th>Perfil</th><th>Book API-Football</th><th>Cuota API-Football</th><th>EV API-Football</th><th>Dif API-justa</th><th>Ratio API/justa</th><th>Book Betano</th><th>Cuota Betano</th><th>EV Betano</th><th>Dif Betano-justa</th><th>Ratio Betano/justa</th><th>Estado API-Football</th><th>Estado Betano</th><th>Cobertura Betano</th><th>Alerta</th><th>Confianza</th><th>Fuente</th><th>Riesgo</th></tr></thead>
         <tbody>{"".join(body_rows)}</tbody>
       </table>
     </div>
   </section>
 </main>
 <script>
+function viewPanel(name){{document.querySelectorAll('.panel').forEach(p=>p.hidden=p.dataset.view!==name);}}
 const q=document.getElementById('q');
 const match=document.getElementById('match');
 const filter=document.getElementById('filter');
@@ -633,7 +708,7 @@ function applyFilters(){{
     if(f==='api') ok=ok&&tr.dataset.api==='1';
     if(f==='betano') ok=ok&&tr.dataset.betano==='1';
     if(f==='no_betano') ok=ok&&tr.dataset.betano==='0';
-    if(f==='seguro') ok=ok&&txt.includes('seguro');
+    if(f==='seguro') ok=ok&&txt.includes('principal');
     if(f==='valor') ok=ok&&txt.includes('valor');
     tr.style.display=ok?'':'none';
   }}
@@ -641,6 +716,7 @@ function applyFilters(){{
 function resetFilters(){{q.value='';match.value='';filter.value='all';applyFilters();}}
 [q,match,filter].forEach(el=>el.addEventListener('input',applyFilters));
 document.querySelectorAll('th').forEach((th,idx)=>{{
+  idx=th.cellIndex;
   th.addEventListener('click',()=>{{
     const table=th.closest('table'); const tbody=table.querySelector('tbody'); const trs=Array.from(tbody.querySelectorAll('tr'));
     const asc=th.dataset.asc!=='1';
@@ -671,11 +747,13 @@ def main() -> None:
     out = Path(args.output_dir)
     out.mkdir(exist_ok=True)
     data = json.load(open(src, encoding="utf-8"))
+    data = apply_policy(data)
     rows, summary, top_ev = build_rows(data)
 
     html_path = out / f"{args.prefix}.html"
     csv_path = out / f"{args.prefix}_todos_los_mercados.csv"
     write_csv(rows, csv_path)
+    write_player_csv(data, out / f'{args.prefix}_jugadores.csv')
     write_html(rows, summary, data, src, build_title(data, args.date), html_path)
 
     print(html_path.resolve())

@@ -215,6 +215,7 @@ def write_index(reports: list[dict[str, str]]) -> None:
     <div class="meta">Publicado automáticamente con GitHub Pages · Generado: {html.escape(generated)}</div>
   </header>
   <main>
+    <section class="card"><h2>Dashboard de decisiones y resultados</h2><a class="primary" href="dashboard.html">Abrir dashboard organizado</a><p class="meta">Principales, alternativas, jugadores y aciertos históricos separados. Ninguna selección es segura.</p></section>
     <section class="card">
       {latest_link}
       <p class="meta">El botón abre el HTML más reciente copiado desde <code>outputs/</code>.</p>
@@ -242,6 +243,11 @@ def main() -> None:
     SITE.mkdir(parents=True)
     reports = copy_reports()
     write_index(reports)
+    from build_dashboard import build
+    build(SITE / 'dashboard.html')
+    performance = OUTPUTS / 'performance_summary.json'
+    if performance.exists():
+        shutil.copy2(performance, SITE / 'performance_summary.json')
     print(f"site built: {SITE}")
     print(f"html reports: {len(reports)}")
 

@@ -13,6 +13,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 if hasattr(sys.stderr, "reconfigure"):
@@ -343,9 +347,10 @@ def select_enriched_pick(markets: list[dict[str, Any]], fallback: dict[str, Any]
         and (market.get("probability") or 0) >= 0.5
         and market.get("recommendation_tier") != "Evitar"
         and int(market.get("market_priority") or 0) >= 3
+        and any(value is not None and value >= .02 for value in [market.get('ev_api', market.get('ev')), market.get('ev_betano')])
     ]
     if not candidates:
-        return fallback
+        return None
     return sorted(
         candidates,
         key=lambda market: (
@@ -884,7 +889,7 @@ def enrich_data(data: dict[str, Any], betano: dict[str, dict[str, Any]]) -> dict
             fair = market.get("fair_odds") or fair_odds(market.get("probability"))
             market["edge_betano"] = round(betano_odds - fair, 4) if betano_odds is not None and fair is not None else None
             market["value_ratio_betano"] = round(betano_odds / fair, 4) if betano_odds is not None and fair is not None else None
-            market["ev_betano"] = round((market.get("probability") or 0) * betano_odds - 1, 4) if betano_odds else None
+            market["ev_betano"] = round((1-market.get('push_probability',0))*((market.get("probability") or 0) * betano_odds - 1), 4) if betano_odds else None
             if betano_odds is None:
                 market["status_betano"] = "No encontrado en Betano"
             elif market["ev_betano"] > 0:
@@ -893,6 +898,8 @@ def enrich_data(data: dict[str, Any], betano: dict[str, dict[str, Any]]) -> dict
                 market["status_betano"] = "EV negativo Betano"
             market["combined_recommendation_score"] = combined_recommendation_score(market)
         result["betano_coverage_status"] = betano_coverage_status(scraped, result.get("all_markets", []))
+        if result.get('pre_match_eligible') is False:
+            result['betano_coverage_status'] = 'Fuera del análisis prepartido; Betano no consultado'
         rec = result.get("recommended_pick") or {}
         enriched_pick = select_enriched_pick(result.get("all_markets", []), rec or None)
         if enriched_pick:
@@ -908,7 +915,7 @@ def enrich_data(data: dict[str, Any], betano: dict[str, dict[str, Any]]) -> dict
             fair = rec.get("fair_odds") or fair_odds(rec.get("probability"))
             rec["edge_betano"] = round(betano_odds - fair, 4) if betano_odds is not None and fair is not None else None
             rec["value_ratio_betano"] = round(betano_odds / fair, 4) if betano_odds is not None and fair is not None else None
-            rec["ev_betano"] = round((rec.get("probability") or 0) * betano_odds - 1, 4) if betano_odds else None
+            rec["ev_betano"] = round((1-rec.get('push_probability',0))*((rec.get("probability") or 0) * betano_odds - 1), 4) if betano_odds else None
             rec["status_betano"] = (
                 "No encontrado en Betano"
                 if betano_odds is None
@@ -917,7 +924,8 @@ def enrich_data(data: dict[str, Any], betano: dict[str, dict[str, Any]]) -> dict
             rec["betano_source_url"] = scraped.get("url")
             rec["combined_recommendation_score"] = combined_recommendation_score(rec)
             rec["betano_coverage_status"] = result["betano_coverage_status"]
-    return enriched
+    from analysis.policy import apply_policy
+    return apply_policy(enriched)
 
 
 async def run(source: Path, output: Path) -> Path:

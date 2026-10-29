@@ -103,7 +103,7 @@ python tools\run_published_protocol.py --dates YYYY-MM-DD,YYYY-MM-DD --leagues 1
 Para el protocolo completo de las ligas/copas que se vienen siguiendo, usar alcance separado para no sobrescribir reportes de una sola liga:
 
 ```powershell
-python tools\run_published_protocol.py --dates YYYY-MM-DD,YYYY-MM-DD --leagues 2,3,39,281,140,135,61,48,13,11,78,71,73,130,81 --report-scope full --publish
+python tools\run_published_protocol.py --dates YYYY-MM-DD,YYYY-MM-DD --leagues 2,3,848,39,281,140,135,61,48,13,11,78,71,73,128,130,81,10,667,5,536,253 --report-scope full --publish
 ```
 
 Sin `--publish`, solo genera archivos locales.
@@ -140,12 +140,12 @@ El protocolo publicado debe usar el scoring enriquecido, no solo probabilidad si
 - calcular `cuota_justa` (`fair_odds`) desde la probabilidad;
 - calcular diferencia y ratio contra cuota API-Football;
 - calcular diferencia y ratio contra cuota Betano cuando exista cuota equivalente;
-- clasificar cada mercado con `perfil_pick` (`Seguro`, `Valor` o `Solo modelo`);
+- clasificar cada mercado con `perfil_pick` (`Valor estimado`, `Revisar` o `Solo modelo`); no usar `Seguro` como promesa;
 - priorizar mercados accionables con `market_priority`;
 - agregar `score` / `combined_recommendation_score` para ordenar recomendaciones;
 - marcar `alerta_valor` cuando el valor dependa demasiado de una cuota sospechosamente alta;
 - marcar `cobertura_betano` por partido (`Betano mapeado`, `Betano no expuesto`, etc.);
-- mostrar una sección HTML de `Vista combinada sugerida` con 3 o 4 picks por partido cuando haya candidatos suficientes.
+- mostrar Principales, Alternativas y Solo análisis por separado; permitir `Sin apuesta`. La vista de alternativas contiene hasta dos opciones, no exige 3 o 4 picks ni calcula probabilidades conjuntas sin un modelo de correlación.
 - mostrar una sección HTML de `Auditoría del modelo: últimos partidos usados`, con fuente usada por equipo, cantidad de partidos, goles a favor/en contra y los fixtures recientes que alimentaron el cálculo.
 - agregar en el CSV columnas de auditoría (`modelo_base`, `fuente_local`, `ultimos_local`, `fuente_visita`, `ultimos_visita`) para poder revisar qué datos deportivos entraron al modelo.
 
@@ -170,6 +170,18 @@ Los reportes publicados viven en:
 La carpeta pública `reports/` puede conservar variantes históricas o de alcance (`full`, `uefa_conmebol`, etc.) para no romper enlaces directos, pero la portada `index.html` debe agrupar por fecha y mostrar solo una fila visible por día.
 
 ## Base de datos operativa
+
+### Auditoría y dashboard v2
+
+- `db/performance_store.py` congela snapshots y picks con hash e inmutabilidad SQLite. Conserva el pick original, versión del modelo y política; nunca reemplazar el histórico por picks seleccionados después de conocer resultados.
+- `tools/update_performance.py --from YYYY-MM-DD --to YYYY-MM-DD` recupera versiones históricas existentes y liquida mercados soportados con API-Football. Los snapshots recuperados se etiquetan como tales; no prueban la primera publicación. Separar versiones y papeles `principal`/`alternativa`.
+- Acierto principal = un pick por fixture y versión, no todos los mercados. Informar ganados/perdidos/nulos/pendientes, Brier, fiabilidad y ROI ficticio por casa. Las apuestas reales se registran aparte con importe y cuota tomada en el dashboard Streamlit local; nunca publicar esos tickets en Pages.
+- `analysis/policy.py` exige EV estimado >=2%, muestra mínima provisional de 6 y probabilidad 55–95%, con revisión de ventajas extraordinarias. Las muestras de primer tiempo/córners/remates/tarjetas se cuentan con sus propios datos, no con toda la temporada. Estos umbrales son guardas provisionales, no parámetros optimizados.
+- Modelo `poisson-shrink-v2`: regularización provisional de tasas de gol con prior de seis partidos a 1.3 goles, sin atribuirle una calibración validada. Nuevos mercados conjuntos se calculan desde la distribución conjunta de marcadores.
+- `analysis/calibration.py` genera diagnóstico con separación temporal; no aplicar la corrección histórica al modelo nuevo. Su activación requiere validación prospectiva por versión y familia.
+- `services/player_markets.py` y `tools/enrich_player_options.py` construyen observaciones de jugadores: seis encuentros previos, minutos, goles, asistencias, remates, tiros al arco y amarillas. Mostrar muestras y escenarios condicionales a minutos, no probabilidad calibrada/EV. Cuotas individuales exactas muestran la casa real; no mapear etiquetas ambiguas ni inventar Betano. No contar observaciones individuales en aciertos principales.
+- Público: `dashboard.html` usa `outputs/dashboard_data.json` y `outputs/performance_summary.json` sin tickets privados. `tools/build_pages_site.py` lo recompila y GitHub Actions conserva los datos portables; publicar los JSON, plantilla y dashboard junto a los reportes. Mantener el archivo de informes con una fila por día.
+- Pruebas: `python tools/test_protocol_v2.py` y `python tools/test_api_odds_mapping.py`.
 
 El flujo completo debe persistirse en base de datos.
 

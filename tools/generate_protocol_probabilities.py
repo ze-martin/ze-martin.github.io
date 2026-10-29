@@ -170,7 +170,7 @@ def recommendation_tier(key: str, probability: float, odds: float | None, ev: fl
     if odds is None:
         return "Solo modelo"
     if probability >= 0.72 and priority >= 8 and (ev is None or ev >= -0.03):
-        return "Seguro"
+        return "Probabilidad alta estimada" if ev is not None and ev >= .02 else "Sin valor"
     if ev is not None and ev >= 0.08 and probability >= 0.5:
         return "Valor"
     if key.startswith(("CARDS_", "SHOTS_")) or source in {"recent_all_competitions", "premium_recent_all_competitions"}:
@@ -224,9 +224,10 @@ def build_market_rows(probabilities: dict[str, float], odds: dict, sources: dict
         if offered_odds is not None and (not math.isfinite(offered_odds) or offered_odds <= 1):
             offered_odds = None
         ev = None
+        push_probability = probabilities.get('1X2:DRAW', 0.0) if key.startswith('DRAW_NO_BET:') else 0.0
         status = "Sin cuota/EV"
         if offered_odds is not None:
-            ev = expected_value(probability, offered_odds)
+            ev = (1 - push_probability) * expected_value(probability, offered_odds)
             status = "EV positivo" if ev >= 0.02 else "EV negativo"
         source = sources.get(key)
         fair = fair_odds(probability)
@@ -235,6 +236,7 @@ def build_market_rows(probabilities: dict[str, float], odds: dict, sources: dict
                 "key": key,
                 "market": market_name(key),
                 "probability": round(probability, 4),
+                'push_probability': round(push_probability, 6),
                 "fair_odds": round(fair, 3) if fair is not None else None,
                 "odds": round(offered_odds, 3) if offered_odds is not None else None,
                 "ev": round(ev, 4) if ev is not None else None,
@@ -377,6 +379,12 @@ def build_model_audit(
     )
     return {
         "base_model_source": base_model_source or (base_sources[0] if base_sources else None),
+        'advanced_sample_min': {
+            'FIRST_HALF_TOTALS': min(context.get('first_half_goals', {}).get(s, {}).get('samples', 0) for s in ['home','away']),
+            'CORNERS': min(context.get('attacking_quality', {}).get(s, {}).get('samples', 0) for s in ['home','away']),
+            'SHOTS': min(context.get('attacking_quality', {}).get(s, {}).get('samples', 0) for s in ['home','away']),
+            'CARDS': min(context.get('defensive_quality', {}).get(s, {}).get('samples', 0) for s in ['home','away']),
+        },
         "base_model_source_label": source_label(base_model_source or (base_sources[0] if base_sources else None)),
         "probability_sources": [
             {"key": source, "label": source_label(source)}
@@ -405,7 +413,7 @@ def generate(from_date: date, to_date: date, leagues: list[str], date_lima_filte
         query_from = query_to = date.fromisoformat(date_lima_filter)
     raw_matches = sorted(
         api.get_matches(query_from, query_to, leagues),
-        key=lambda item: (item["kickoff"], item["league"], item["home_team"], item["away_team"]),
+        key=lambda item: (to_lima(item["kickoff"])[2], item["league"], item["home_team"], item["away_team"]),
     )
     filtered_matches: list[dict] = []
     for match in raw_matches:
@@ -459,6 +467,8 @@ def generate(from_date: date, to_date: date, leagues: list[str], date_lima_filte
         stats = api.get_team_stats(match)
         base_model_source: str | None = None
         try:
+            if min(int(stats.get(side,{}).get('matches') or 0) for side in ['home','away']) < 6:
+                raise ValueError('Muestra del torneo menor de seis partidos; se intenta historial multi-competición')
             base_probabilities = model.match_probabilities(
                 team_stats(match["home_team"], stats.get("home", {})),
                 team_stats(match["away_team"], stats.get("away", {})),
@@ -524,6 +534,8 @@ def generate(from_date: date, to_date: date, leagues: list[str], date_lima_filte
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "api_odds_mapping_version": "exact-market-and-period-v2",
+        "model_version": model.version,
+        "model_regularization": "Prior provisional 6 partidos a 1.3 goles; no calibrado por liga",
         "cache_dir": str(api.cache_dir.resolve()),
         "from_date": from_date.isoformat(),
         "to_date": to_date.isoformat(),

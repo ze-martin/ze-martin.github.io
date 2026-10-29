@@ -32,6 +32,7 @@ class OddsMappingTest(unittest.TestCase):
             bet("Goals Over/Under First Half", "Over 1.5", 2.3),
             bet("Double Chance", "Home/Draw", 1.1),
             bet("Double Chance - First Half", "Home/Draw", 1.8),
+            bet('Results/Both Teams Score','Home/Yes',2.88),
         ])
         self.assertEqual(markets["1X2:HOME"], 1.4)
         self.assertEqual(markets["BTTS:YES"], 1.75)
@@ -39,6 +40,7 @@ class OddsMappingTest(unittest.TestCase):
         self.assertEqual(markets["TEAM_TOTAL_HOME:OVER_1_5"], 3.1)
         self.assertEqual(markets["FIRST_HALF_TOTALS:OVER_1_5"], 2.3)
         self.assertEqual(markets["DOUBLE_CHANCE:1X"], 1.1)
+        self.assertEqual(markets['WIN_BTTS:HOME_YES'],2.88)
 
     def test_no_full_time_total_is_invented(self):
         markets = self.parse([{"name": "Goals Over/Under - Second Half", "values": [

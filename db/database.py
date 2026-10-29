@@ -147,7 +147,11 @@ class Database:
             "project": "D:\\CODEX\\APUESTAS",
             "intent": "Cuando el usuario pida protocolo completo, ejecutar flujo publicado completo con las ligas y copas seguidas.",
             "single_command": "python tools\\run_published_protocol.py --dates YYYY-MM-DD --leagues 1 --publish",
-            "full_command": "python tools\\run_published_protocol.py --dates YYYY-MM-DD --leagues 2,3,39,281,140,135,61,48,13,11,78,71,73,130,81 --report-scope full --publish",
+            "full_command": "python tools\\run_published_protocol.py --dates YYYY-MM-DD --leagues 2,3,848,39,281,140,135,61,48,13,11,78,71,73,128,130,81,10,667,5,536,253 --report-scope full --publish",
+            'audit_command': 'python tools/update_performance.py --from YYYY-MM-DD --to YYYY-MM-DD',
+            'dashboard_public': 'https://ze-martin.github.io/dashboard.html',
+            'model_version': 'poisson-shrink-v2',
+            'selection_policy': 'selection-v2: un principal máximo y hasta dos alternativas; Sin apuesta permitido; no usar Seguro',
             "full_protocol_leagues": [
                 "Champions League",
                 "Europa League",

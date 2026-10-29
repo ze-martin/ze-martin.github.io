@@ -25,7 +25,7 @@ SITE = ROOT / "site"
 PUBLIC_BASE = "https://ze-martin.github.io/reports"
 GITHUB_HARD_FILE_LIMIT_BYTES = 100 * 1024 * 1024
 GITHUB_SAFE_FILE_LIMIT_BYTES = 95 * 1024 * 1024
-FULL_PROTOCOL_LEAGUES = {"2", "3", "39", "281", "140", "135", "61", "48", "13", "11", "78", "71", "73", "130", "81"}
+FULL_PROTOCOL_LEAGUES = set('2,3,848,39,281,140,135,61,48,13,11,78,71,73,128,130,81,10,667,5,536,253'.split(','))
 SINGLE_LEAGUE_SCOPES = {
     "1": "world_cup",
     "2": "champions_league",
@@ -162,6 +162,11 @@ def enrich_betano(source: Path, day: date, python_bin: str | None, scope: str) -
 
 
 def export_report(source: Path, day: date, scope: str) -> tuple[Path, Path]:
+    players = run([sys.executable, 'tools\\enrich_player_options.py', '--source', str(source), '--output', str(source)], check=False)
+    print(players.stdout)
+    # Never reuse a pre-enrichment recommended pick after new market evidence.
+    from analysis.policy import apply_policy
+    source.write_text(json.dumps(apply_policy(json.loads(source.read_text(encoding='utf-8'))), ensure_ascii=False, indent=2), encoding='utf-8')
     prefix = report_prefix(day, scope)
     result = run(
         [
@@ -183,15 +188,29 @@ def export_report(source: Path, day: date, scope: str) -> tuple[Path, Path]:
     return html, csv
 
 
+def copy_generated_file(source: Path, target: Path) -> None:
+    for attempt in range(6):
+        try:
+            shutil.copy2(source, target)
+            return
+        except OSError as exc:
+            if getattr(exc, 'winerror', None) not in {32, 1224} or attempt == 5:
+                raise
+            time.sleep(2)
+
+
 def build_pages() -> None:
     result = run([sys.executable, "tools\\build_pages_site.py"])
     print(result.stdout)
-    shutil.copy2(SITE / "index.html", ROOT / "index.html")
-    shutil.copy2(SITE / "latest.html", ROOT / "latest.html")
+    copy_generated_file(SITE / "index.html", ROOT / "index.html")
+    copy_generated_file(SITE / "latest.html", ROOT / "latest.html")
+    for filename in ['dashboard.html', 'performance_summary.json']:
+        if (SITE / filename).exists():
+            copy_generated_file(SITE / filename, ROOT / filename)
     REPORTS.mkdir(exist_ok=True)
     for source in (SITE / "reports").glob("*"):
         if source.is_file():
-            shutil.copy2(source, REPORTS / source.name)
+            copy_generated_file(source, REPORTS / source.name)
 
 
 def validate_html(path: Path) -> None:
@@ -210,6 +229,13 @@ def save_run_to_database(
     commit: str | None = None,
 ) -> None:
     data = json.loads(enriched_json.read_text(encoding="utf-8"))
+    try:
+        from db.performance_store import PerformanceStore
+        ledger = PerformanceStore()
+        ledger.initialize()
+        ledger.freeze(data, day.isoformat())
+    except Exception as exc:
+        print(f'AVISO: no se pudo congelar auditoría: {exc}')
     public_html_url = f"{PUBLIC_BASE}/{html_path.name}"
     public_csv_url = f"{PUBLIC_BASE}/{csv_path.name}"
     try:
@@ -381,6 +407,12 @@ def publish(days: list[date], message: str | None, scope: str) -> str:
         "tools\\export_protocol_html.py",
         "tools\\generate_protocol_probabilities.py",
         "tools\\run_published_protocol.py",
+        'analysis/policy.py', 'analysis/settlement.py', 'analysis/calibration.py', 'analysis/model.py',
+        'services/player_markets.py', 'db/performance_store.py', 'app/main.py', 'dashboard/app.py',
+        'dashboard/public.html', 'tools/update_performance.py', 'tools/enrich_player_options.py', 'tools/build_dashboard.py',
+        'dashboard.html', 'outputs/dashboard_data.json', 'outputs/performance_summary.json', 'performance_summary.json',
+        'tools/test_protocol_v2.py', 'tools/test_api_odds_mapping.py', 'tools/refresh_dashboard.py',
+        'tools/supplement_protocol_betano.py', '.github/workflows/deploy-pages.yml', '.gitignore',
     ]
     memory_path = ROOT / "data" / "protocol_memory.sqlite"
     if memory_path.exists() and memory_path.stat().st_size < GITHUB_SAFE_FILE_LIMIT_BYTES:
@@ -392,6 +424,8 @@ def publish(days: list[date], message: str | None, scope: str) -> str:
         )
     for day in days:
         prefix = report_prefix(day, scope)
+        if (OUTPUTS / f'{prefix}_jugadores.csv').exists():
+            add_paths.extend([f'outputs/{prefix}_jugadores.csv',f'reports/{prefix}_jugadores.csv'])
         add_paths.extend(
             [
                 f"outputs\\{prefix}.html",
@@ -507,6 +541,9 @@ def main() -> None:
         days_with_reports.append(day)
 
     commit = ""
+    if days_with_reports and not args.no_db:
+        audited = run([sys.executable, 'tools\\update_performance.py', '--from', '2026-10-22', '--to', max(days_with_reports).isoformat()], check=False)
+        print(audited.stdout)
     if args.publish and days_with_reports:
         commit = publish(days_with_reports, args.commit_message, scope)
         if not args.no_db:

@@ -20,7 +20,7 @@ async def supplement(base: Path, target: Path, events: list[str], refresh_api: b
     known = {r["match"] for r in data.get("results", []) if r.get("pre_match_eligible") is not False}
     scraped = {
         r["match"]: {"url": r.get("betano_source_url"), "odds": r.get("betano_raw_odds") or {},
-                     "market_count": r.get("betano_market_count", 0)}
+                     "market_count": r.get("betano_market_count", 0), 'error': r.get('betano_fetch_error')}
         for r in current.get("results", [])
     }
     if refresh_api:
@@ -70,7 +70,11 @@ async def supplement(base: Path, target: Path, events: list[str], refresh_api: b
                     await page.close()
         finally:
             await browser.close()
-    target.write_text(json.dumps(enrich_data(data, scraped), ensure_ascii=False, indent=2), encoding="utf-8")
+    enriched = enrich_data(data, scraped)
+    for key in ['discovery_errors','denied_discovery_paths']:
+        if key in current.get('betano_enrichment',{}):
+            enriched['betano_enrichment'][key] = current['betano_enrichment'][key]
+    target.write_text(json.dumps(enriched, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 if __name__ == "__main__":

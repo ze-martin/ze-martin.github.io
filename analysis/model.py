@@ -28,6 +28,7 @@ def poisson_probability(goals: int, expected_goals: float) -> float:
 
 
 class PoissonModel:
+    version = 'poisson-shrink-v2'
     def __init__(self, max_goals: int = 8, home_advantage: float = 1.08) -> None:
         if max_goals < 3:
             raise ValueError("max_goals must be at least 3")
@@ -37,12 +38,17 @@ class PoissonModel:
     def expected_goals(self, home: TeamStats, away: TeamStats) -> tuple[float, float]:
         if home.matches <= 0 or away.matches <= 0:
             raise ValueError("both teams need historical matches")
-        home_xg = max(0.05, ((home.attack_rate + away.defense_rate) / 2) * self.home_advantage)
-        away_xg = max(0.05, (away.attack_rate + home.defense_rate) / 2)
+        # Six virtual matches at a neutral 1.3-goal prior are a provisional
+        # regularizer, not a fitted league benchmark. Keep that distinction visible.
+        def rate(goals, matches):
+            return (goals + 6 * 1.3) / (matches + 6)
+        home_xg = max(0.05, ((rate(home.goals_for, home.matches) + rate(away.goals_against, away.matches)) / 2) * self.home_advantage)
+        away_xg = max(0.05, (rate(away.goals_for, away.matches) + rate(home.goals_against, home.matches)) / 2)
         return home_xg, away_xg
 
     def match_probabilities(self, home: TeamStats, away: TeamStats) -> dict[str, float]:
         home_xg, away_xg = self.expected_goals(home, away)
+        bound = max(self.max_goals, int(math.ceil(max(home_xg, away_xg) + 10 * math.sqrt(max(home_xg, away_xg)) + 10)))
         home_win = draw = away_win = both_score = 0.0
         totals = {
             1.5: 0.0,
@@ -60,9 +66,9 @@ class PoissonModel:
             2.5: 0.0,
         }
 
-        for home_goals in range(self.max_goals + 1):
+        for home_goals in range(bound + 1):
             hp = poisson_probability(home_goals, home_xg)
-            for away_goals in range(self.max_goals + 1):
+            for away_goals in range(bound + 1):
                 probability = hp * poisson_probability(away_goals, away_xg)
                 if home_goals > away_goals:
                     home_win += probability
@@ -110,6 +116,26 @@ class PoissonModel:
             line_key = str(line).replace(".", "_")
             probabilities[f"TEAM_TOTAL_AWAY:OVER_{line_key}"] = min(probability, 1.0)
             probabilities[f"TEAM_TOTAL_AWAY:UNDER_{line_key}"] = max(0.0, min(1.0, 1 - probability))
+        # Joint events use the same score grid, never multiplication of correlated marginals.
+        for side in ['HOME', 'AWAY']:
+            for answer in ['YES', 'NO']:
+                probabilities[f'WIN_BTTS:{side}_{answer}'] = 0.0
+        for lo, hi in [(1, 3), (2, 3), (2, 4)]:
+            probabilities[f'TOTAL_RANGE:{lo}_{hi}'] = 0.0
+        for hg in range(bound + 1):
+            for ag in range(bound + 1):
+                mass = poisson_probability(hg, home_xg) * poisson_probability(ag, away_xg)
+                for side, won in [('HOME', hg > ag), ('AWAY', ag > hg)]:
+                    if won:
+                        answer = 'YES' if hg > 0 and ag > 0 else 'NO'
+                        probabilities[f'WIN_BTTS:{side}_{answer}'] += mass
+                for lo, hi in [(1, 3), (2, 3), (2, 4)]:
+                    if lo <= hg + ag <= hi:
+                        probabilities[f'TOTAL_RANGE:{lo}_{hi}'] += mass
+        for side, lam in [('HOME', away_xg), ('AWAY', home_xg)]:
+            p = math.exp(-lam)
+            probabilities[f'CLEAN_SHEET:{side}_YES'] = p
+            probabilities[f'CLEAN_SHEET:{side}_NO'] = 1 - p
         return probabilities
 
     def advanced_market_probabilities(self, match: dict[str, Any]) -> dict[str, float]:
