@@ -359,6 +359,8 @@ def select_enriched_pick(markets: list[dict[str, Any]], fallback: dict[str, Any]
 
 
 def betano_coverage_status(scraped: dict[str, Any], markets: list[dict[str, Any]]) -> str:
+    if "ERR_CERT_" in str(scraped.get("error") or "") and not scraped.get("odds"):
+        return "Betano no verificado (error TLS)"
     if "HTTP 403" in str(scraped.get("error") or "") and not scraped.get("odds"):
         return "Betano no verificado (HTTP 403)"
     if not scraped.get("url"):
@@ -671,6 +673,7 @@ async def discover_event_links(page, matches: list[dict[str, str]]) -> dict[str,
     found: dict[str, str] = {}
     denied_event_feed = False
     denied_paths: set[str] = set()
+    discovery_errors: list[str] = []
     for url in discovery_urls_for_matches(matches):
         if denied_event_feed and url not in {BETANO_HOME, "https://www.betano.pe/sport/futbol/", "https://www.betano.pe/sport/futbol/proximos-partidos-hoy/"}:
             continue
@@ -710,7 +713,11 @@ async def discover_event_links(page, matches: list[dict[str, str]]) -> dict[str,
             if len(found) == len(matches):
                 break
         except Exception as exc:
+            discovery_errors.append(f"{type(exc).__name__}: {str(exc)[:160]}")
             print(f"Betano discovery: error en {url}: {type(exc).__name__}: {str(exc)[:160]}", flush=True)
+            if "ERR_CERT_" in str(exc):
+                print("Betano discovery: certificado TLS no validado; se detiene la navegación sin desactivar HTTPS", flush=True)
+                break
             continue
         finally:
             if scan_page is not page:
@@ -719,6 +726,7 @@ async def discover_event_links(page, matches: list[dict[str, str]]) -> dict[str,
                 except Exception:
                     pass
     page._betano_discovery_denied_paths = sorted(denied_paths)
+    page._betano_discovery_errors = discovery_errors
     return found
 
 
@@ -950,11 +958,14 @@ async def run(source: Path, output: Path) -> Path:
         await page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
         links = await discover_event_links(page, matches)
         denied_paths = getattr(page, "_betano_discovery_denied_paths", [])
+        discovery_errors = getattr(page, "_betano_discovery_errors", [])
         await page.close()
         async def scrape_match(match):
             url = links.get(match["match"])
             if not url:
                 error = "Descubrimiento de eventos restringido por Betano (HTTP 403)" if denied_paths else "No se encontró enlace en Betano"
+                if any("ERR_CERT_" in item for item in discovery_errors):
+                    error = next(item for item in discovery_errors if "ERR_CERT_" in item)
                 scraped[match["match"]] = {"url": None, "odds": {}, "market_count": 0, "error": error}
                 print(f"Betano: sin enlace para {match['match']}", flush=True)
                 return
@@ -994,6 +1005,7 @@ async def run(source: Path, output: Path) -> Path:
 
     enriched = enrich_data(data, scraped)
     enriched["betano_enrichment"]["denied_discovery_paths"] = denied_paths
+    enriched["betano_enrichment"]["discovery_errors"] = discovery_errors
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(enriched, ensure_ascii=False, indent=2), encoding="utf-8")
     print(output.resolve())

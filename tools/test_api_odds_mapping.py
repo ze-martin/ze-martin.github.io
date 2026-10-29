@@ -77,6 +77,16 @@ class FixtureEligibilityTest(unittest.TestCase):
 
 
 class BetanoDenialTest(unittest.IsolatedAsyncioTestCase):
+    async def test_tls_error_stops_navigation_without_weakening_https(self):
+        page = SimpleNamespace(context=SimpleNamespace(browser=None),
+                               on=lambda *args: None,
+                               goto=AsyncMock(side_effect=RuntimeError('net::ERR_CERT_AUTHORITY_INVALID')))
+        with patch('tools.enrich_protocol_with_betano.discovery_urls_for_matches', return_value=[BETANO_HOME, BETANO_HOME + 'sport/futbol/']):
+            await discover_event_links(page, [])
+        self.assertEqual(page.goto.await_count, 1)
+        self.assertIn('ERR_CERT_AUTHORITY_INVALID', page._betano_discovery_errors[0])
+        self.assertEqual(betano_coverage_status({'error': 'net::ERR_CERT_AUTHORITY_INVALID'}, []), 'Betano no verificado (error TLS)')
+
     async def test_denied_feed_is_not_retried_on_other_competitions(self):
         class Page:
             context = SimpleNamespace(browser=None)
