@@ -4,6 +4,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
 from analysis.policy import apply_policy,compatible_keys
@@ -97,6 +98,16 @@ class LedgerTests(unittest.TestCase):
 
 
 class ModelAndPlayerTests(unittest.TestCase):
+    def test_public_dashboard_builds_without_private_database(self):
+        import tools.build_dashboard as builder
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);(root/'outputs').mkdir()
+            (root/'outputs/dashboard_data.json').write_text(json.dumps({'reports':[{'date':'2099-01-01','results':[]}]}),encoding='utf-8')
+            with patch.object(builder,'ROOT',root):
+                target=builder.build(root/'site/dashboard.html')
+            self.assertIn('2099-01-01',target.read_text(encoding='utf-8'))
+            self.assertFalse((root/'data/protocol_memory.sqlite').exists())
+
     def test_joint_probabilities_are_coherent(self):
         m=PoissonModel();p=m.match_probabilities(TeamStats('A',10,15,10),TeamStats('B',10,12,13))
         self.assertAlmostEqual(sum(p['1X2:'+s] for s in ['HOME','DRAW','AWAY']),1,places=6)
