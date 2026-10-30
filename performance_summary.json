@@ -4,19 +4,19 @@
     {
       "model_version": "legacy-exact-v1",
       "role": "principal",
-      "n": 184,
-      "won": 117,
-      "lost": 67,
-      "pending": 19,
+      "n": 193,
+      "won": 125,
+      "lost": 68,
+      "pending": 10,
       "void": 0,
-      "hit_rate": 0.6358695652173914,
-      "brier": 0.24359254978260872,
-      "expected": 0.766008695652174,
+      "hit_rate": 0.6476683937823834,
+      "brier": 0.23868480129533678,
+      "expected": 0.7648253886010362,
       "houses": {
         "William Hill · API": {
-          "n": 167,
-          "profit_units": -19.81,
-          "roi": -0.11862275449101796
+          "n": 176,
+          "profit_units": -16.43,
+          "roi": -0.09335227272727273
         },
         "Betano · Betano": {
           "n": 18,
@@ -32,9 +32,9 @@
       "reliability": [
         {
           "range": "0%–60%",
-          "n": 17,
-          "predicted": 0.5598705882352941,
-          "observed": 0.35294117647058826
+          "n": 18,
+          "predicted": 0.5570722222222222,
+          "observed": 0.3888888888888889
         },
         {
           "range": "60%–70%",
@@ -44,15 +44,15 @@
         },
         {
           "range": "70%–80%",
-          "n": 88,
-          "predicted": 0.7656340909090908,
-          "observed": 0.6818181818181818
+          "n": 95,
+          "predicted": 0.76556,
+          "observed": 0.6947368421052632
         },
         {
           "range": "80%–90%",
-          "n": 47,
-          "predicted": 0.8380872340425531,
-          "observed": 0.6808510638297872
+          "n": 48,
+          "predicted": 0.8373729166666667,
+          "observed": 0.6875
         },
         {
           "range": "90%–100%",
@@ -65,16 +65,35 @@
     {
       "model_version": "poisson-shrink-v2|selection-v2",
       "role": "principal",
-      "n": 0,
-      "won": 0,
-      "lost": 0,
-      "pending": 10,
+      "n": 3,
+      "won": 2,
+      "lost": 1,
+      "pending": 52,
       "void": 0,
-      "hit_rate": null,
-      "brier": null,
-      "expected": null,
-      "houses": {},
-      "reliability": []
+      "hit_rate": 0.6666666666666666,
+      "brier": 0.24636795,
+      "expected": 0.6377666666666667,
+      "houses": {
+        "William Hill · API": {
+          "n": 3,
+          "profit_units": 0.47,
+          "roi": 0.15666666666666673
+        }
+      },
+      "reliability": [
+        {
+          "range": "0%–60%",
+          "n": 1,
+          "predicted": 0.5836,
+          "observed": 1.0
+        },
+        {
+          "range": "60%–70%",
+          "n": 2,
+          "predicted": 0.6648499999999999,
+          "observed": 0.5
+        }
+      ]
     },
     {
       "model_version": "poisson-shrink-v2|selection-v2",
@@ -82,7 +101,7 @@
       "n": 0,
       "won": 0,
       "lost": 0,
-      "pending": 1,
+      "pending": 16,
       "void": 0,
       "hit_rate": null,
       "brier": null,
@@ -91,24 +110,24 @@
       "reliability": []
     }
   ],
-  "updated_at": "2026-10-29T18:37:18.460187+00:00",
+  "updated_at": "2026-10-30T17:21:53.628473+00:00",
   "calibration_diagnostics": {
     "legacy-exact-v1": {
       "active": false,
       "train_n": 127,
-      "test_n": 57,
+      "test_n": 66,
       "train_end": "2026-10-25",
       "test_start": "2026-10-27",
-      "test_end": "2026-10-28",
+      "test_end": "2026-10-29",
       "intercept": -0.23870434362556528,
       "slope": 0.6739333344241162,
       "raw": {
-        "brier": 0.2610067729824561,
-        "log_loss": 0.783362423245593
+        "brier": 0.24428065984848485,
+        "log_loss": 0.7384640515872826
       },
       "candidate": {
-        "brier": 0.2419028447566911,
-        "log_loss": 0.691644532193415
+        "brier": 0.23403489687110432,
+        "log_loss": 0.6734753928507402
       },
       "improves_holdout": true,
       "reason": "Diagnóstico, no corrección activa: validar por familia y versión con snapshots prospectivos; no transferir al modelo v2"
