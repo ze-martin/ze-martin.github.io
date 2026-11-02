@@ -4,19 +4,19 @@
     {
       "model_version": "legacy-exact-v1",
       "role": "principal",
-      "n": 193,
-      "won": 125,
-      "lost": 68,
-      "pending": 10,
+      "n": 203,
+      "won": 132,
+      "lost": 71,
+      "pending": 0,
       "void": 0,
-      "hit_rate": 0.6476683937823834,
-      "brier": 0.23868480129533678,
-      "expected": 0.7648253886010362,
+      "hit_rate": 0.6502463054187192,
+      "brier": 0.23664527635467983,
+      "expected": 0.7618827586206898,
       "houses": {
         "William Hill · API": {
-          "n": 176,
-          "profit_units": -16.43,
-          "roi": -0.09335227272727273
+          "n": 186,
+          "profit_units": -15.81,
+          "roi": -0.08499999999999999
         },
         "Betano · Betano": {
           "n": 18,
@@ -32,27 +32,27 @@
       "reliability": [
         {
           "range": "0%–60%",
-          "n": 18,
-          "predicted": 0.5570722222222222,
-          "observed": 0.3888888888888889
+          "n": 20,
+          "predicted": 0.557265,
+          "observed": 0.4
         },
         {
           "range": "60%–70%",
-          "n": 19,
-          "predicted": 0.6525894736842105,
-          "observed": 0.5789473684210527
+          "n": 21,
+          "predicted": 0.6527809523809524,
+          "observed": 0.5714285714285714
         },
         {
           "range": "70%–80%",
-          "n": 95,
-          "predicted": 0.76556,
-          "observed": 0.6947368421052632
+          "n": 100,
+          "predicted": 0.765077,
+          "observed": 0.71
         },
         {
           "range": "80%–90%",
-          "n": 48,
-          "predicted": 0.8373729166666667,
-          "observed": 0.6875
+          "n": 49,
+          "predicted": 0.8375122448979592,
+          "observed": 0.673469387755102
         },
         {
           "range": "90%–100%",
@@ -65,76 +65,122 @@
     {
       "model_version": "poisson-shrink-v2|selection-v2",
       "role": "principal",
-      "n": 3,
-      "won": 2,
-      "lost": 1,
-      "pending": 52,
+      "n": 55,
+      "won": 31,
+      "lost": 24,
+      "pending": 20,
       "void": 0,
-      "hit_rate": 0.6666666666666666,
-      "brier": 0.24636795,
-      "expected": 0.6377666666666667,
+      "hit_rate": 0.5636363636363636,
+      "brier": 0.26533245654545456,
+      "expected": 0.6846309090909091,
       "houses": {
         "William Hill · API": {
-          "n": 3,
-          "profit_units": 0.47,
-          "roi": 0.15666666666666673
+          "n": 55,
+          "profit_units": -2.74,
+          "roi": -0.04981818181818182
         }
       },
       "reliability": [
         {
           "range": "0%–60%",
-          "n": 1,
-          "predicted": 0.5836,
-          "observed": 1.0
+          "n": 11,
+          "predicted": 0.5799636363636363,
+          "observed": 0.6363636363636364
         },
         {
           "range": "60%–70%",
-          "n": 2,
-          "predicted": 0.6648499999999999,
-          "observed": 0.5
+          "n": 24,
+          "predicted": 0.6460708333333333,
+          "observed": 0.5833333333333334
+        },
+        {
+          "range": "70%–80%",
+          "n": 12,
+          "predicted": 0.7544083333333335,
+          "observed": 0.4166666666666667
+        },
+        {
+          "range": "80%–90%",
+          "n": 8,
+          "predicted": 0.8395625,
+          "observed": 0.625
         }
       ]
     },
     {
       "model_version": "poisson-shrink-v2|selection-v2",
       "role": "alternativa",
-      "n": 0,
-      "won": 0,
-      "lost": 0,
-      "pending": 16,
+      "n": 16,
+      "won": 12,
+      "lost": 4,
+      "pending": 1,
       "void": 0,
-      "hit_rate": null,
-      "brier": null,
-      "expected": null,
-      "houses": {},
-      "reliability": []
+      "hit_rate": 0.75,
+      "brier": 0.170480744375,
+      "expected": 0.64434375,
+      "houses": {
+        "William Hill · API": {
+          "n": 16,
+          "profit_units": 4.09,
+          "roi": 0.255625
+        }
+      },
+      "reliability": [
+        {
+          "range": "0%–60%",
+          "n": 6,
+          "predicted": 0.56635,
+          "observed": 0.5
+        },
+        {
+          "range": "60%–70%",
+          "n": 6,
+          "predicted": 0.6455000000000001,
+          "observed": 0.8333333333333334
+        },
+        {
+          "range": "70%–80%",
+          "n": 3,
+          "predicted": 0.7338666666666667,
+          "observed": 1.0
+        },
+        {
+          "range": "80%–90%",
+          "n": 1,
+          "predicted": 0.8368,
+          "observed": 1.0
+        }
+      ]
     }
   ],
-  "updated_at": "2026-10-30T17:21:53.628473+00:00",
+  "updated_at": "2026-11-02T15:23:00.804923+00:00",
   "calibration_diagnostics": {
     "legacy-exact-v1": {
       "active": false,
-      "train_n": 127,
-      "test_n": 66,
-      "train_end": "2026-10-25",
-      "test_start": "2026-10-27",
-      "test_end": "2026-10-29",
-      "intercept": -0.23870434362556528,
-      "slope": 0.6739333344241162,
+      "train_n": 142,
+      "test_n": 61,
+      "train_end": "2026-10-27",
+      "test_start": "2026-10-28",
+      "test_end": "2026-10-30",
+      "intercept": -0.01999450550645039,
+      "slope": 0.49848123395556443,
       "raw": {
-        "brier": 0.24428065984848485,
-        "log_loss": 0.7384640515872826
+        "brier": 0.24114558426229507,
+        "log_loss": 0.708930100957199
       },
       "candidate": {
-        "brier": 0.23403489687110432,
-        "log_loss": 0.6734753928507402
+        "brier": 0.23014536686333437,
+        "log_loss": 0.6563815523161023
       },
       "improves_holdout": true,
       "reason": "Diagnóstico, no corrección activa: validar por familia y versión con snapshots prospectivos; no transferir al modelo v2"
     },
     "poisson-shrink-v2|selection-v2": {
       "active": false,
-      "reason": "Se necesitan al menos cuatro fechas cerradas independientes"
+      "train_n": 10,
+      "test_n": 45,
+      "train_end": "2026-10-30",
+      "reason": "Muestra insuficiente para calibración: mínimos provisionales 100/40"
     }
   },
   "errors": []
