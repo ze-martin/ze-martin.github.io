@@ -86,7 +86,7 @@ def apply_policy(data):
                 continue
             families.add(family)
             selected.append(market)
-            if len(selected) == 3:
+            if len(selected) == (4 if result.get('automatic_min_probability') is not None else 3):
                 break
         for index, market in enumerate(selected):
             market['selection_role'] = 'Principal' if index == 0 else 'Alternativa'

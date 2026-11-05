@@ -36,7 +36,7 @@ def build():
             mode='Revisión próxima al inicio' if 0<minutes<=60 else 'Análisis anticipado · no T−60'
             if start<=now: mode='Histórico · partido iniciado'
             picks.append([p['match'],start.strftime('%d/%m %H:%M'),'★ Principal: '+label,house,q.get('selection_odds',''),f"{q.get('probability',0):.1%}",f'{ev:+.1%}' if isinstance(ev,(int,float)) else 'No disponible',captured.strftime('%d/%m/%Y %H:%M'),mode])
-            for alternative in p.get('alternatives',[])[:2]:
+            for alternative in p.get('alternatives',[])[:3]:
                 if alternative.get('probability',0)<=.70: continue
                 picks.append([p['match'],start.strftime('%d/%m %H:%M'),'Alternativa: '+alternative['market'],alternative.get('selection_bookmaker',''),alternative.get('selection_odds',''),f"{alternative['probability']:.1%}",'Ver análisis',captured.strftime('%d/%m/%Y %H:%M'),mode])
     finally:
@@ -55,7 +55,7 @@ def build():
     page=page.replace('</style>','tr:has(td:nth-child(3):first-child){color:inherit} tr.principal{background:#153d35;border-left:4px solid #4de0ac}</style>').replace('<tr><td>','<tr><td>')
     import re
     page=re.sub(r'<tr>(?=(?:(?!</tr>).)*★ Principal:)', '<tr class="principal">',page)
-    page=page.replace('<h2>Sugerencias T−60</h2>','<h2>Sugerencias T−60 · probabilidad estimada &gt;70%</h2><p>Principal resaltada en verde. Hasta dos alternativas válidas, no una combinada recomendada. No se fuerzan opciones si faltan cuotas o valor. Los registros anteriores pueden no contener alternativas.</p>')
+    page=page.replace('<h2>Sugerencias T−60</h2>','<h2>Sugerencias T−60 · probabilidad estimada &gt;70%</h2><p>Principal resaltada en verde. Hasta tres alternativas adicionales válidas, no una combinada recomendada. No se fuerzan opciones si faltan cuotas o valor. Los registros anteriores pueden no contener alternativas.</p>')
     (ROOT/'automatico.html').write_text(page,encoding='utf-8')
 
 if __name__=='__main__': build()
