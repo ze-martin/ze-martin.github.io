@@ -23,9 +23,17 @@ def build():
                 country=f['league'].get('country') or 'País no informado'
                 row=[local.strftime('%H:%M') if state=='NS' else 'No confirmado',COUNTRIES.get(country,country)+' · '+f['league']['name'],f['teams']['home']['name']+' — '+f['teams']['away']['name'],STATES.get(state,'Estado no reconocido: '+state)]
                 (agenda if state=='NS' else exceptions).append(row)
-        for raw, in db.execute('SELECT payload FROM outbox ORDER BY fixture DESC'):
+        for raw, kickoff in db.execute('SELECT o.payload,j.kickoff FROM outbox o JOIN jobs j ON j.id=o.fixture ORDER BY j.kickoff'):
             p=json.loads(raw); q=p['pick']
-            picks.append([p['match'],q['market'],q.get('selection_bookmaker',''),q.get('selection_odds',''),p['captured']])
+            captured=datetime.fromisoformat(p['captured']).astimezone(ZoneInfo('America/Lima'))
+            start=datetime.fromisoformat(kickoff).astimezone(ZoneInfo('America/Lima'))
+            minutes=(start-captured).total_seconds()/60
+            label={'DOUBLE_CHANCE X2':'Visitante o empate','DOUBLE_CHANCE 1X':'Local o empate','BTTS YES':'Ambos equipos anotan','BTTS NO':'No anotan ambos','FIRST_HALF_TOTALS UNDER.1.5':'Menos de 1,5 goles en el primer tiempo','FIRST_HALF_TOTALS OVER.0.5':'Más de 0,5 goles en el primer tiempo','TOTALS UNDER.3.5':'Menos de 3,5 goles'}.get(q['market'],q['market'])
+            house=q.get('selection_bookmaker','')
+            ev=q.get('ev_betano') if house=='Betano' else q.get('ev_api',q.get('ev'))
+            mode='Revisión próxima al inicio' if 0<minutes<=60 else 'Análisis anticipado · no T−60'
+            if start<=now: mode='Histórico · partido iniciado'
+            picks.append([p['match'],start.strftime('%d/%m %H:%M'),label,house,q.get('selection_odds',''),f"{q.get('probability',0):.1%}",f'{ev:+.1%}' if isinstance(ev,(int,float)) else 'No disponible',captured.strftime('%d/%m/%Y %H:%M'),mode])
     finally:
         db.close()
     def table(headers, rows):
@@ -36,6 +44,9 @@ def build():
     info='<section id="cambios"><h2>Aplazados y otros estados · fuera del calendario programado</h2><p>No se consideran confirmados para mañana. Los aplazados, cancelados y suspendidos no generan recomendaciones prepartido.</p>'+table(['Hora','País · competición','Partido','Estado'],exceptions)+'</section>'
     page=page.replace(heading,info+heading).replace('<th>Competición</th>','<th>País · competición</th>').replace('Horario Perú. Actualizado:', 'Horario Perú (UTC−5). Fuente: API-Football. Programado no garantiza que no haya cambios posteriores. Actualizado:')
     page=page.replace('<p>No hay sugerencias T−60 registradas todavía.</p></section><section id="cambios">','<p>No hay partidos programados disponibles.</p></section><section id="cambios">')
+    old=table(['Partido','Mercado','Casa','Cuota capturada','Captura UTC'],picks)
+    new=table(['Partido','Inicio · Perú','Selección','Casa','Cuota consultada','Probabilidad estimada','EV estimado','Análisis · hora Perú','Tipo de captura'],picks)
+    page=page.replace(old,new).replace('Capturas históricas, no cuotas en vivo. Comprueba horario y vigencia. Ninguna selección es segura.','La hora de análisis indica cuándo terminó la revisión, no el instante exacto de cada cuota. Probabilidades del modelo sin calibración validada. EV +5% significa un retorno teórico medio de 0,05 por unidad apostada, no una ganancia garantizada. Los análisis anticipados del arranque no son capturas T−60. Comprueba cuota y vigencia antes de apostar.')
     (ROOT/'automatico.html').write_text(page,encoding='utf-8')
 
 if __name__=='__main__': build()
