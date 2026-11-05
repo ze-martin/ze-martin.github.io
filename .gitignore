@@ -8,3 +8,7 @@ data/api_cache/
 protocol/runs/
 site/
 **/node_modules/
+data/automatic_protocol.sqlite*
+data/automatic_runs/
+data/telegram_private/
+data/automatic_protocol.lock
