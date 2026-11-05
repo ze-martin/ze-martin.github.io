@@ -215,6 +215,7 @@ def write_index(reports: list[dict[str, str]]) -> None:
     <div class="meta">Publicado automáticamente con GitHub Pages · Generado: {html.escape(generated)}</div>
   </header>
   <main>
+    <section class="card"><h2>Agenda y sugerencias automáticas</h2><a class="primary" href="automatico.html#agenda">Partidos de mañana</a> · <a href="automatico.html#sugerencias">Sugerencias T−60</a></section>
     <section class="card"><h2>Dashboard de decisiones y resultados</h2><a class="primary" href="dashboard.html">Abrir dashboard organizado</a><p class="meta">Principales, alternativas, jugadores y aciertos históricos separados. Ninguna selección es segura.</p></section>
     <section class="card">
       {latest_link}
