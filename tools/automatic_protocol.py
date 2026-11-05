@@ -120,6 +120,12 @@ def analyze(job, db):
             elif not pick:
                 db.execute('DELETE FROM outbox WHERE fixture=?',(job['id'],))
         db.execute('UPDATE jobs SET state="completed",report=? WHERE id=?', (str(path), job['id']))
+    # Do not hold fresh alerts until every simultaneous fixture has finished.
+    from tools.build_automatic_page import build
+    build()
+    delivery = subprocess.run([sys.executable, str(ROOT/'tools/telegram_dispatch.py'), '--opportunities'], cwd=ROOT, timeout=90, check=False)
+    if delivery.returncode:
+        print('AVISO: envío Telegram no confirmado; revisar registro local, sin reintentar entregas inciertas.')
 
 
 def main():
