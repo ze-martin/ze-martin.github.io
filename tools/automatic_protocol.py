@@ -102,7 +102,9 @@ def analyze(job, db):
     path.write_text(json.dumps(result, ensure_ascii=False), encoding='utf-8')
     for tool in ['enrich_protocol_with_betano.py', 'enrich_player_options.py']:
         subprocess.run([sys.executable, str(ROOT/'tools'/tool), '--source', str(path), '--output', str(path)], cwd=ROOT, check=True, timeout=900)
-    result = apply_policy(json.loads(path.read_text(encoding='utf-8')))
+    result = json.loads(path.read_text(encoding='utf-8'))
+    result['automatic_min_probability'] = .70
+    result = apply_policy(result)
     result['automatic_capture_started_at'] = started
     result['automatic_capture_completed_at'] = datetime.now(timezone.utc).isoformat()
     path.write_text(json.dumps(result, ensure_ascii=False), encoding='utf-8')
@@ -114,7 +116,9 @@ def analyze(job, db):
         for match in result.get('results', []):
             pick = match.get('recommended_pick')
             if pick and kickoff > datetime.now(timezone.utc):
-                db.execute('INSERT OR IGNORE INTO outbox(fixture,payload) VALUES(?,?)', (job['id'], json.dumps({'match':match['match'], 'pick':pick, 'captured':result['automatic_capture_completed_at'], 'report':str(path)}, ensure_ascii=False)))
+                db.execute('INSERT INTO outbox(fixture,payload) VALUES(?,?) ON CONFLICT(fixture) DO UPDATE SET payload=excluded.payload,state="telegram_disabled"', (job['id'], json.dumps({'match':match['match'], 'pick':pick, 'alternatives':match.get('alternative_picks',[]), 'captured':result['automatic_capture_completed_at'], 'report':str(path)}, ensure_ascii=False)))
+            elif not pick:
+                db.execute('DELETE FROM outbox WHERE fixture=?',(job['id'],))
         db.execute('UPDATE jobs SET state="completed",report=? WHERE id=?', (str(path), job['id']))
 
 
@@ -149,12 +153,17 @@ def main():
             tomorrow = (datetime.now(LIMA).date()+timedelta(days=1)).isoformat()
             if not db.execute('SELECT 1 FROM plans WHERE day=?', (tomorrow,)).fetchone():
                 plan(db, tomorrow, config)
-            for job in db.execute('SELECT * FROM jobs WHERE state="pending" ORDER BY kickoff').fetchall():
+            for job in db.execute('SELECT * FROM jobs WHERE state IN ("pending","completed") ORDER BY kickoff').fetchall():
                 minutes = (datetime.fromisoformat(job['kickoff'])-datetime.now(timezone.utc)).total_seconds()/60
                 if minutes < 45:
                     with db:
                         db.execute('UPDATE jobs SET state="missed" WHERE id=?', (job['id'],))
                 elif minutes <= 60:
+                    if job['state']=='completed' and job['report']:
+                        saved=json.loads(Path(job['report']).read_text(encoding='utf-8'))
+                        captured=datetime.fromisoformat(saved['automatic_capture_completed_at'])
+                        if (datetime.fromisoformat(job['kickoff'])-captured).total_seconds()/60 <=60:
+                            continue
                     try:
                         analyze(job, db)
                     except Exception as exc:

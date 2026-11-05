@@ -70,6 +70,10 @@ def apply_policy(data):
             chosen = max(quotes,key=lambda q:q[2]) if quotes and not market['selection_reasons'] else None
             market['selection_bookmaker'] = ('Betano' if chosen[0]=='Betano' else market.get('bookmaker_api') or market.get('bookmaker') or match.get('bookmaker')) if chosen else None
             market['selection_odds'] = chosen[1] if chosen else None
+            if result.get('automatic_min_probability') is not None and market.get('probability',0) <= result['automatic_min_probability']:
+                market['selection_reasons'].append('No supera el umbral automático de probabilidad')
+                market['selection_role'] = 'Solo análisis'
+                market['recommendation_tier'] = 'Revisar'
             if not market['selection_reasons']:
                 market['selection_score_v2'] = market.get('combined_recommendation_score', market.get('recommendation_score', 0))
                 candidates.append(market)

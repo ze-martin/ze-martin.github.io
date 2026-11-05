@@ -25,6 +25,8 @@ def build():
                 (agenda if state=='NS' else exceptions).append(row)
         for raw, kickoff in db.execute('SELECT o.payload,j.kickoff FROM outbox o JOIN jobs j ON j.id=o.fixture ORDER BY j.kickoff'):
             p=json.loads(raw); q=p['pick']
+            if q.get('probability',0)<=.70:
+                continue
             captured=datetime.fromisoformat(p['captured']).astimezone(ZoneInfo('America/Lima'))
             start=datetime.fromisoformat(kickoff).astimezone(ZoneInfo('America/Lima'))
             minutes=(start-captured).total_seconds()/60
@@ -33,7 +35,10 @@ def build():
             ev=q.get('ev_betano') if house=='Betano' else q.get('ev_api',q.get('ev'))
             mode='Revisión próxima al inicio' if 0<minutes<=60 else 'Análisis anticipado · no T−60'
             if start<=now: mode='Histórico · partido iniciado'
-            picks.append([p['match'],start.strftime('%d/%m %H:%M'),label,house,q.get('selection_odds',''),f"{q.get('probability',0):.1%}",f'{ev:+.1%}' if isinstance(ev,(int,float)) else 'No disponible',captured.strftime('%d/%m/%Y %H:%M'),mode])
+            picks.append([p['match'],start.strftime('%d/%m %H:%M'),'★ Principal: '+label,house,q.get('selection_odds',''),f"{q.get('probability',0):.1%}",f'{ev:+.1%}' if isinstance(ev,(int,float)) else 'No disponible',captured.strftime('%d/%m/%Y %H:%M'),mode])
+            for alternative in p.get('alternatives',[])[:2]:
+                if alternative.get('probability',0)<=.70: continue
+                picks.append([p['match'],start.strftime('%d/%m %H:%M'),'Alternativa: '+alternative['market'],alternative.get('selection_bookmaker',''),alternative.get('selection_odds',''),f"{alternative['probability']:.1%}",'Ver análisis',captured.strftime('%d/%m/%Y %H:%M'),mode])
     finally:
         db.close()
     def table(headers, rows):
@@ -47,6 +52,10 @@ def build():
     old=table(['Partido','Mercado','Casa','Cuota capturada','Captura UTC'],picks)
     new=table(['Partido','Inicio · Perú','Selección','Casa','Cuota consultada','Probabilidad estimada','EV estimado','Análisis · hora Perú','Tipo de captura'],picks)
     page=page.replace(old,new).replace('Capturas históricas, no cuotas en vivo. Comprueba horario y vigencia. Ninguna selección es segura.','La hora de análisis indica cuándo terminó la revisión, no el instante exacto de cada cuota. Probabilidades del modelo sin calibración validada. EV +5% significa un retorno teórico medio de 0,05 por unidad apostada, no una ganancia garantizada. Los análisis anticipados del arranque no son capturas T−60. Comprueba cuota y vigencia antes de apostar.')
+    page=page.replace('</style>','tr:has(td:nth-child(3):first-child){color:inherit} tr.principal{background:#153d35;border-left:4px solid #4de0ac}</style>').replace('<tr><td>','<tr><td>')
+    import re
+    page=re.sub(r'<tr>(?=(?:(?!</tr>).)*★ Principal:)', '<tr class="principal">',page)
+    page=page.replace('<h2>Sugerencias T−60</h2>','<h2>Sugerencias T−60 · probabilidad estimada &gt;70%</h2><p>Principal resaltada en verde. Hasta dos alternativas válidas, no una combinada recomendada. No se fuerzan opciones si faltan cuotas o valor. Los registros anteriores pueden no contener alternativas.</p>')
     (ROOT/'automatico.html').write_text(page,encoding='utf-8')
 
 if __name__=='__main__': build()
