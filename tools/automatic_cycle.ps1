@@ -6,6 +6,9 @@ $env:PYTHONIOENCODING='utf-8'
 $env:API_FOOTBALL_CACHE_ENABLED='false'
 $mutex=New-Object Threading.Mutex($false,'Local\APUESTAS-AutomaticCycle')
 if(-not $mutex.WaitOne(0)){exit 0}
+$logFolder=Join-Path $root 'data\automatic_logs'
+New-Item -ItemType Directory -Path $logFolder -Force | Out-Null
+Start-Transcript -Path (Join-Path $logFolder ((Get-Date -Format 'yyyyMMdd-HHmmss')+'.log')) -Append | Out-Null
 try {
     $tomorrow=[TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTime]::UtcNow,'SA Pacific Standard Time').Date.AddDays(1).ToString('yyyy-MM-dd')
     & python tools/automatic_protocol.py --plan $tomorrow
@@ -31,5 +34,6 @@ try {
     if($LASTEXITCODE -ne 0){throw 'telegram'}
 } catch {
     Write-Output ('Automatic cycle failed: '+$_.Exception.GetType().Name)
+    & python tools/telegram_dispatch.py --technical
     exit 1
-} finally {$mutex.ReleaseMutex();$mutex.Dispose()}
+} finally {Stop-Transcript | Out-Null; $mutex.ReleaseMutex();$mutex.Dispose()}

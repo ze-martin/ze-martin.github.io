@@ -12,7 +12,7 @@ try {
         $name='APUESTAS-T60-'+$at.ToString('yyyyMMdd-HHmm')
         $action=New-ScheduledTaskAction -Execute 'powershell.exe' -Argument ('-NoProfile -File "'+$root+'\tools\automatic_cycle.ps1"') -WorkingDirectory $root
         $trigger=New-ScheduledTaskTrigger -Once -At $at
-        $settings=New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 40)
+        $settings=New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 40) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -WakeToRun
         Register-ScheduledTask -TaskName $name -Action $action -Trigger $trigger -Settings $settings -Description 'Analisis prepartido APUESTAS. No coloca apuestas. Requiere usuario conectado.' -Force | Out-Null
         $count++
     }

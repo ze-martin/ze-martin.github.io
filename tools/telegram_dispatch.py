@@ -16,6 +16,7 @@ def main():
     parser.add_argument('--nightly',action='store_true')
     parser.add_argument('--opportunities',action='store_true')
     parser.add_argument('--test',action='store_true')
+    parser.add_argument('--technical',action='store_true',help='Alerta técnica deduplicada por día')
     args=parser.parse_args()
     folder=ROOT/'data/telegram_private'
     config=json.loads((folder/'connection.json').read_text(encoding='utf-8-sig'))
@@ -31,6 +32,9 @@ def main():
     db.execute('CREATE TABLE IF NOT EXISTS deliveries (id TEXT PRIMARY KEY,state TEXT NOT NULL,updated TEXT NOT NULL)')
     now=datetime.now(timezone.utc)
     messages=[]
+    if args.technical:
+        day=now.astimezone(ZoneInfo('America/Lima')).date().isoformat()
+        messages.append(('technical:'+day,'APUESTAS: una ejecución automática falló. No equivale a Sin apuesta. Las cuotas y recomendaciones de ese bloque no están confirmadas como actualizadas. Se guardó un registro técnico local para revisión.'))
     if args.test:
         messages.append(('test:'+now.isoformat(),'APUESTAS: prueba integral de conexión. No es una recomendación ni activa apuestas.'))
     if args.nightly:

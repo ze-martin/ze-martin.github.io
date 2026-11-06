@@ -12,3 +12,4 @@ data/automatic_protocol.sqlite*
 data/automatic_runs/
 data/telegram_private/
 data/automatic_protocol.lock
+data/automatic_logs/
