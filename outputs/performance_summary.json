@@ -65,95 +65,105 @@
     {
       "model_version": "poisson-shrink-v2|selection-v2",
       "role": "principal",
-      "n": 75,
-      "won": 37,
-      "lost": 38,
-      "pending": 38,
+      "n": 105,
+      "won": 51,
+      "lost": 54,
+      "pending": 68,
       "void": 0,
-      "hit_rate": 0.49333333333333335,
-      "brier": 0.2836866689333334,
-      "expected": 0.673028,
+      "hit_rate": 0.4857142857142857,
+      "brier": 0.28525900647619046,
+      "expected": 0.6709809523809525,
       "houses": {
         "William Hill · API": {
-          "n": 75,
-          "profit_units": -11.51,
-          "roi": -0.15346666666666667
+          "n": 103,
+          "profit_units": -16.53,
+          "roi": -0.16048543689320388
+        },
+        "Betano · Betano": {
+          "n": 2,
+          "profit_units": 1.08,
+          "roi": 0.5399999999999999
         }
       },
       "reliability": [
         {
           "range": "0%–60%",
-          "n": 19,
-          "predicted": 0.5787894736842105,
-          "observed": 0.47368421052631576
+          "n": 26,
+          "predicted": 0.5800461538461538,
+          "observed": 0.5
         },
         {
           "range": "60%–70%",
-          "n": 30,
-          "predicted": 0.6468066666666666,
-          "observed": 0.5333333333333333
+          "n": 43,
+          "predicted": 0.6442720930232558,
+          "observed": 0.46511627906976744
         },
         {
           "range": "70%–80%",
-          "n": 18,
-          "predicted": 0.7421888888888889,
-          "observed": 0.3888888888888889
+          "n": 26,
+          "predicted": 0.7390076923076924,
+          "observed": 0.46153846153846156
         },
         {
           "range": "80%–90%",
-          "n": 8,
-          "predicted": 0.8395625,
-          "observed": 0.625
+          "n": 10,
+          "predicted": 0.8453900000000001,
+          "observed": 0.6
         }
       ]
     },
     {
       "model_version": "poisson-shrink-v2|selection-v2",
       "role": "alternativa",
-      "n": 17,
-      "won": 12,
-      "lost": 5,
-      "pending": 20,
+      "n": 33,
+      "won": 26,
+      "lost": 7,
+      "pending": 36,
       "void": 0,
-      "hit_rate": 0.7058823529411765,
-      "brier": 0.18984703058823527,
-      "expected": 0.6480235294117647,
+      "hit_rate": 0.7878787878787878,
+      "brier": 0.16033027393939395,
+      "expected": 0.6923636363636363,
       "houses": {
         "William Hill · API": {
-          "n": 17,
-          "profit_units": 3.09,
-          "roi": 0.18176470588235294
+          "n": 24,
+          "profit_units": 4.14,
+          "roi": 0.1725
+        },
+        "Betano · Betano": {
+          "n": 9,
+          "profit_units": 6.39,
+          "roi": 0.71
         }
       },
       "reliability": [
         {
           "range": "0%–60%",
-          "n": 6,
-          "predicted": 0.56635,
-          "observed": 0.5
+          "n": 8,
+          "predicted": 0.5656749999999999,
+          "observed": 0.625
         },
         {
           "range": "60%–70%",
-          "n": 6,
-          "predicted": 0.6455000000000001,
-          "observed": 0.8333333333333334
+          "n": 10,
+          "predicted": 0.64837,
+          "observed": 0.8
         },
         {
           "range": "70%–80%",
-          "n": 4,
-          "predicted": 0.727125,
+          "n": 8,
+          "predicted": 0.7443875,
           "observed": 0.75
         },
         {
           "range": "80%–90%",
-          "n": 1,
-          "predicted": 0.8368,
+          "n": 7,
+          "predicted": 0.8405428571428571,
           "observed": 1.0
         }
       ]
     }
   ],
-  "updated_at": "2026-11-05T17:42:07.409677+00:00",
+  "updated_at": "2026-11-06T15:52:33.930659+00:00",
   "calibration_diagnostics": {
     "legacy-exact-v1": {
       "active": false,
@@ -178,7 +188,7 @@
     "poisson-shrink-v2|selection-v2": {
       "active": false,
       "train_n": 55,
-      "test_n": 20,
+      "test_n": 50,
       "train_end": "2026-11-01",
       "reason": "Muestra insuficiente para calibración: mínimos provisionales 100/40"
     }
