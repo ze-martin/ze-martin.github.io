@@ -12,7 +12,7 @@ STATES = {'NS':'Programado · no iniciado','TBD':'Horario por confirmar','PST':'
 def build():
     now = datetime.now(ZoneInfo('America/Lima'))
     tomorrow = (now.date()+timedelta(days=1)).isoformat()
-    agenda, picks, exceptions = [], [], []
+    agenda, picks, exceptions, history = [], [], [], []
     db = sqlite3.connect(f'file:{(ROOT/"data/automatic_protocol.sqlite").as_posix()}?mode=ro',uri=True)
     try:
         for kickoff, raw in db.execute('SELECT kickoff,payload FROM jobs ORDER BY kickoff'):
@@ -29,16 +29,17 @@ def build():
                 continue
             captured=datetime.fromisoformat(p['captured']).astimezone(ZoneInfo('America/Lima'))
             start=datetime.fromisoformat(kickoff).astimezone(ZoneInfo('America/Lima'))
+            destination = picks if start.date()==now.date() else history
             minutes=(start-captured).total_seconds()/60
             label={'DOUBLE_CHANCE X2':'Visitante o empate','DOUBLE_CHANCE 1X':'Local o empate','BTTS YES':'Ambos equipos anotan','BTTS NO':'No anotan ambos','FIRST_HALF_TOTALS UNDER.1.5':'Menos de 1,5 goles en el primer tiempo','FIRST_HALF_TOTALS OVER.0.5':'Más de 0,5 goles en el primer tiempo','TOTALS UNDER.3.5':'Menos de 3,5 goles'}.get(q['market'],q['market'])
             house=q.get('selection_bookmaker','')
             ev=q.get('ev_betano') if house=='Betano' else q.get('ev_api',q.get('ev'))
             mode='Revisión próxima al inicio' if 0<minutes<=60 else 'Análisis anticipado · no T−60'
             if start<=now: mode='Histórico · partido iniciado'
-            picks.append([p['match'],start.strftime('%d/%m %H:%M'),'★ Principal: '+label,house,q.get('selection_odds',''),f"{q.get('probability',0):.1%}",f'{ev:+.1%}' if isinstance(ev,(int,float)) else 'No disponible',captured.strftime('%d/%m/%Y %H:%M'),mode])
+            destination.append([p['match'],start.strftime('%d/%m %H:%M'),'★ Principal: '+label,house,q.get('selection_odds',''),f"{q.get('probability',0):.1%}",f'{ev:+.1%}' if isinstance(ev,(int,float)) else 'No disponible',captured.strftime('%d/%m/%Y %H:%M'),mode])
             for alternative in p.get('alternatives',[])[:3]:
                 if alternative.get('probability',0)<=.70: continue
-                picks.append([p['match'],start.strftime('%d/%m %H:%M'),'Alternativa: '+alternative['market'],alternative.get('selection_bookmaker',''),alternative.get('selection_odds',''),f"{alternative['probability']:.1%}",'Ver análisis',captured.strftime('%d/%m/%Y %H:%M'),mode])
+                destination.append([p['match'],start.strftime('%d/%m %H:%M'),'Alternativa: '+alternative['market'],alternative.get('selection_bookmaker',''),alternative.get('selection_odds',''),f"{alternative['probability']:.1%}",'Ver análisis',captured.strftime('%d/%m/%Y %H:%M'),mode])
     finally:
         db.close()
     def table(headers, rows):
@@ -56,6 +57,12 @@ def build():
     import re
     page=re.sub(r'<tr>(?=(?:(?!</tr>).)*★ Principal:)', '<tr class="principal">',page)
     page=page.replace('<h2>Sugerencias T−60</h2>','<h2>Sugerencias T−60 · probabilidad estimada &gt;70%</h2><p>Principal resaltada en verde. Hasta tres alternativas adicionales válidas, no una combinada recomendada. No se fuerzan opciones si faltan cuotas o valor. Los registros anteriores pueden no contener alternativas.</p>')
+    page=page.replace('Sugerencias T−60 · probabilidad estimada &gt;70%', 'Sugerencias de hoy '+now.strftime('%d/%m/%Y')+' · probabilidad estimada &gt;70%')
+    if not picks:
+        page=page.replace('<section id="sugerencias">','<section id="sugerencias"><p><strong>Hoy todavía no hay oportunidades registradas que cumplan los filtros.</strong> Esto no implica que no haya partidos: pueden estar pendientes, descartados o tener un fallo técnico. Los registros de ayer están en el histórico inferior.</p>')
+    archive='<section id="historico"><details><summary>Ver sugerencias históricas · no vigentes</summary>'+table(['Partido','Inicio · Perú','Selección','Casa','Cuota histórica','Probabilidad estimada','EV estimado','Análisis · Perú','Tipo'],history)+'</details></section>'
+    page=page.replace('</body>',archive+'</body>')
+    if '</body>' not in page: page=page.replace('</html>',archive+'</html>')
     (ROOT/'automatico.html').write_text(page,encoding='utf-8')
 
 if __name__=='__main__': build()
