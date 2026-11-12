@@ -65,19 +65,19 @@
     {
       "model_version": "poisson-shrink-v2|selection-v2",
       "role": "principal",
-      "n": 105,
-      "won": 51,
-      "lost": 54,
-      "pending": 68,
+      "n": 200,
+      "won": 105,
+      "lost": 95,
+      "pending": 26,
       "void": 0,
-      "hit_rate": 0.4857142857142857,
-      "brier": 0.28525900647619046,
-      "expected": 0.6709809523809525,
+      "hit_rate": 0.525,
+      "brier": 0.26663979985,
+      "expected": 0.6873165,
       "houses": {
         "William Hill · API": {
-          "n": 103,
-          "profit_units": -16.53,
-          "roi": -0.16048543689320388
+          "n": 198,
+          "profit_units": -26.82,
+          "roi": -0.13545454545454547
         },
         "Betano · Betano": {
           "n": 2,
@@ -88,46 +88,46 @@
       "reliability": [
         {
           "range": "0%–60%",
-          "n": 26,
-          "predicted": 0.5800461538461538,
-          "observed": 0.5
+          "n": 40,
+          "predicted": 0.5774,
+          "observed": 0.45
         },
         {
           "range": "60%–70%",
-          "n": 43,
-          "predicted": 0.6442720930232558,
-          "observed": 0.46511627906976744
+          "n": 74,
+          "predicted": 0.6403324324324324,
+          "observed": 0.44594594594594594
         },
         {
           "range": "70%–80%",
-          "n": 26,
-          "predicted": 0.7390076923076924,
-          "observed": 0.46153846153846156
+          "n": 57,
+          "predicted": 0.7476368421052632,
+          "observed": 0.631578947368421
         },
         {
           "range": "80%–90%",
-          "n": 10,
-          "predicted": 0.8453900000000001,
-          "observed": 0.6
+          "n": 29,
+          "predicted": 0.8402551724137931,
+          "observed": 0.6206896551724138
         }
       ]
     },
     {
       "model_version": "poisson-shrink-v2|selection-v2",
       "role": "alternativa",
-      "n": 33,
-      "won": 26,
-      "lost": 7,
-      "pending": 36,
+      "n": 71,
+      "won": 45,
+      "lost": 26,
+      "pending": 9,
       "void": 0,
-      "hit_rate": 0.7878787878787878,
-      "brier": 0.16033027393939395,
-      "expected": 0.6923636363636363,
+      "hit_rate": 0.6338028169014085,
+      "brier": 0.2220256184507042,
+      "expected": 0.6824746478873239,
       "houses": {
         "William Hill · API": {
-          "n": 24,
-          "profit_units": 4.14,
-          "roi": 0.1725
+          "n": 62,
+          "profit_units": -3.74,
+          "roi": -0.060322580645161286
         },
         "Betano · Betano": {
           "n": 9,
@@ -138,32 +138,32 @@
       "reliability": [
         {
           "range": "0%–60%",
-          "n": 8,
-          "predicted": 0.5656749999999999,
-          "observed": 0.625
+          "n": 18,
+          "predicted": 0.56885,
+          "observed": 0.5
         },
         {
           "range": "60%–70%",
-          "n": 10,
-          "predicted": 0.64837,
-          "observed": 0.8
+          "n": 25,
+          "predicted": 0.649988,
+          "observed": 0.6
         },
         {
           "range": "70%–80%",
-          "n": 8,
-          "predicted": 0.7443875,
-          "observed": 0.75
+          "n": 16,
+          "predicted": 0.74849375,
+          "observed": 0.6875
         },
         {
           "range": "80%–90%",
-          "n": 7,
-          "predicted": 0.8405428571428571,
-          "observed": 1.0
+          "n": 12,
+          "predicted": 0.8325666666666667,
+          "observed": 0.8333333333333334
         }
       ]
     }
   ],
-  "updated_at": "2026-11-06T15:52:33.930659+00:00",
+  "updated_at": "2026-11-12T17:56:03.021897+00:00",
   "calibration_diagnostics": {
     "legacy-exact-v1": {
       "active": false,
@@ -187,10 +187,23 @@
     },
     "poisson-shrink-v2|selection-v2": {
       "active": false,
-      "train_n": 55,
-      "test_n": 50,
-      "train_end": "2026-11-01",
-      "reason": "Muestra insuficiente para calibración: mínimos provisionales 100/40"
+      "train_n": 105,
+      "test_n": 95,
+      "train_end": "2026-11-05",
+      "test_start": "2026-11-06",
+      "test_end": "2026-11-09",
+      "intercept": -0.4386470136144067,
+      "slope": 0.5104607181065026,
+      "raw": {
+        "brier": 0.2460606767368421,
+        "log_loss": 0.6905807743754945
+      },
+      "candidate": {
+        "brier": 0.23604519155074077,
+        "log_loss": 0.665021585454675
+      },
+      "improves_holdout": true,
+      "reason": "Diagnóstico, no corrección activa: validar por familia y versión con snapshots prospectivos; no transferir al modelo v2"
     }
   },
   "errors": []
