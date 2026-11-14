@@ -65,44 +65,59 @@
     {
       "model_version": "poisson-shrink-v2|selection-v2",
       "role": "principal",
-      "n": 200,
-      "won": 105,
-      "lost": 95,
-      "pending": 26,
+      "n": 224,
+      "won": 123,
+      "lost": 101,
+      "pending": 37,
       "void": 0,
-      "hit_rate": 0.525,
-      "brier": 0.26663979985,
-      "expected": 0.6873165,
+      "hit_rate": 0.5491071428571429,
+      "brier": 0.2590364064732143,
+      "expected": 0.6844316964285715,
       "houses": {
         "William Hill · API": {
-          "n": 198,
-          "profit_units": -26.82,
-          "roi": -0.13545454545454547
+          "n": 215,
+          "profit_units": -20.58,
+          "roi": -0.09572093023255815
         },
         "Betano · Betano": {
           "n": 2,
           "profit_units": 1.08,
           "roi": 0.5399999999999999
+        },
+        "1xBet · API": {
+          "n": 4,
+          "profit_units": -0.46,
+          "roi": -0.11499999999999999
+        },
+        "Marathonbet · API": {
+          "n": 2,
+          "profit_units": 1.67,
+          "roi": 0.835
+        },
+        "Bet365 · API": {
+          "n": 1,
+          "profit_units": 0.55,
+          "roi": 0.55
         }
       },
       "reliability": [
         {
           "range": "0%–60%",
-          "n": 40,
-          "predicted": 0.5774,
-          "observed": 0.45
+          "n": 45,
+          "predicted": 0.5768266666666667,
+          "observed": 0.4888888888888889
         },
         {
           "range": "60%–70%",
-          "n": 74,
-          "predicted": 0.6403324324324324,
-          "observed": 0.44594594594594594
+          "n": 84,
+          "predicted": 0.6412738095238095,
+          "observed": 0.47619047619047616
         },
         {
           "range": "70%–80%",
-          "n": 57,
-          "predicted": 0.7476368421052632,
-          "observed": 0.631578947368421
+          "n": 66,
+          "predicted": 0.7442590909090909,
+          "observed": 0.6515151515151515
         },
         {
           "range": "80%–90%",
@@ -115,32 +130,42 @@
     {
       "model_version": "poisson-shrink-v2|selection-v2",
       "role": "alternativa",
-      "n": 71,
-      "won": 45,
-      "lost": 26,
-      "pending": 9,
+      "n": 77,
+      "won": 47,
+      "lost": 30,
+      "pending": 21,
       "void": 0,
-      "hit_rate": 0.6338028169014085,
-      "brier": 0.2220256184507042,
-      "expected": 0.6824746478873239,
+      "hit_rate": 0.6103896103896104,
+      "brier": 0.22442880077922078,
+      "expected": 0.676638961038961,
       "houses": {
         "William Hill · API": {
-          "n": 62,
-          "profit_units": -3.74,
-          "roi": -0.060322580645161286
+          "n": 65,
+          "profit_units": -5.39,
+          "roi": -0.08292307692307692
         },
         "Betano · Betano": {
           "n": 9,
           "profit_units": 6.39,
           "roi": 0.71
+        },
+        "1xBet · API": {
+          "n": 2,
+          "profit_units": -2.0,
+          "roi": -1.0
+        },
+        "Marathonbet · API": {
+          "n": 1,
+          "profit_units": 0.88,
+          "roi": 0.8799999999999999
         }
       },
       "reliability": [
         {
           "range": "0%–60%",
-          "n": 18,
-          "predicted": 0.56885,
-          "observed": 0.5
+          "n": 23,
+          "predicted": 0.5693086956521739,
+          "observed": 0.43478260869565216
         },
         {
           "range": "60%–70%",
@@ -150,9 +175,9 @@
         },
         {
           "range": "70%–80%",
-          "n": 16,
-          "predicted": 0.74849375,
-          "observed": 0.6875
+          "n": 17,
+          "predicted": 0.7509764705882354,
+          "observed": 0.7058823529411765
         },
         {
           "range": "80%–90%",
@@ -163,7 +188,7 @@
       ]
     }
   ],
-  "updated_at": "2026-11-12T17:56:03.021897+00:00",
+  "updated_at": "2026-11-14T02:42:13.817843+00:00",
   "calibration_diagnostics": {
     "legacy-exact-v1": {
       "active": false,
@@ -187,22 +212,22 @@
     },
     "poisson-shrink-v2|selection-v2": {
       "active": false,
-      "train_n": 105,
-      "test_n": 95,
-      "train_end": "2026-11-05",
-      "test_start": "2026-11-06",
-      "test_end": "2026-11-09",
-      "intercept": -0.4386470136144067,
-      "slope": 0.5104607181065026,
+      "train_n": 120,
+      "test_n": 104,
+      "train_end": "2026-11-06",
+      "test_start": "2026-11-07",
+      "test_end": "2026-11-13",
+      "intercept": -0.6362371021612241,
+      "slope": 0.7817231500812746,
       "raw": {
-        "brier": 0.2460606767368421,
-        "log_loss": 0.6905807743754945
+        "brier": 0.23628794317307691,
+        "log_loss": 0.6712013667125203
       },
       "candidate": {
-        "brier": 0.23604519155074077,
-        "log_loss": 0.665021585454675
+        "brier": 0.24304932560406323,
+        "log_loss": 0.6792628857008233
       },
-      "improves_holdout": true,
+      "improves_holdout": false,
       "reason": "Diagnóstico, no corrección activa: validar por familia y versión con snapshots prospectivos; no transferir al modelo v2"
     }
   },
