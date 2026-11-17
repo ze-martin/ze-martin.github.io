@@ -450,7 +450,12 @@ def build_combo_rows(rows: list[dict]) -> list[dict]:
     return combo
 
 
-def write_html(rows: list[dict], summary: list[dict], data: dict, src: Path, title: str, path: Path) -> None:
+def write_html(rows, summary, data, src, title, path):
+    from services.report_template import render_report
+    render_report(data,path,title)
+
+
+def write_html_legacy(rows: list[dict], summary: list[dict], data: dict, src: Path, title: str, path: Path) -> None:
     player_rows = []
     for match in data.get('results', []):
         for player in (match.get('player_analysis') or {}).get('options', []):

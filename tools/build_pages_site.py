@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import html
+import json
 import re
 import shutil
 from datetime import datetime, timezone
@@ -58,6 +59,8 @@ def report_content_score(path: Path) -> tuple[int, int, int]:
     text = path.read_text(encoding="utf-8", errors="ignore")
     matches = re.search(r"Partidos</span><b>(\d+)</b>", text)
     markets = re.search(r"Mercados</span><b>(\d+)</b>", text)
+    matches = re.search(r'data-report-matches="(\d+)"', text) or matches
+    markets = re.search(r'data-report-markets="(\d+)"', text) or markets
     has_audit = 1 if "Auditoría del modelo" in text else 0
     return (
         has_audit,
@@ -117,6 +120,12 @@ def copy_reports() -> list[dict[str, str]]:
     for source in html_files:
         target = REPORTS / source.name
         shutil.copy2(source, target)
+        audit = source.with_name(source.stem + '_auditoria.json')
+        if audit.exists():
+            payload = json.loads(audit.read_text(encoding='utf-8'))
+            if payload.get('schema') != 'sporting-report-audit-v1':
+                raise ValueError('Esquema de auditoría pública no admitido')
+            shutil.copy2(audit, REPORTS / audit.name)
 
     for source in visible_html_files:
         reports.append(
@@ -133,7 +142,11 @@ def copy_reports() -> list[dict[str, str]]:
         shutil.copy2(source, REPORTS / source.name)
 
     if visible_html_files:
-        shutil.copy2(visible_html_files[0], SITE / "latest.html")
+        latest_source = visible_html_files[0]
+        text = latest_source.read_text(encoding='utf-8')
+        audit_name = latest_source.stem + '_auditoria.json'
+        text = text.replace('href="' + audit_name + '"', 'href="reports/' + audit_name + '"')
+        (SITE / 'latest.html').write_text(text, encoding='utf-8')
 
     return reports
 
