@@ -1,3 +1,7 @@
+# Continuidad aprobada del cierre manual 17/11
+
+Leer primero [validación y pendientes](docs/cierre_manual_20261117/VALIDACION.md). Esta publicación restaura las tablas y conserva históricos y controles. Betano autónomo sigue bloqueado por HTTP 403; Chrome asistido es independiente. Cuotas descartadas: conservar precio observado, casa y ambos relojes; nunca usarlo como precio elegible. TTL provisional 600 s sin renovación artificial. JSON cerrado en Auditoría. Estimaciones sin datos/validación no se muestran como certeza. No activar modelos experimentales ni modificar snapshots históricos. No publicar futuras revisiones, enviar Telegram ni activar tareas sin autorización explícita nueva. Las instrucciones genéricas automáticas que siguen no prevalecen sobre este bloque.
+
 # AGENTE AUTÓNOMO DE SISTEMA DE APUESTAS
 
 Estas instrucciones son la memoria operativa del proyecto `D:\CODEX\APUESTAS`.

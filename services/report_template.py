@@ -13,39 +13,39 @@ def lima(x):
 def number(x):return '—' if x is None else f'{x:.2f}'
 
 def _fresh(m,source,now):
-    # Display gate only: never renew clocks, mutate data or choose another quote.
-    odds=m.get('odds_api',m.get('odds')) if source=='API' else m.get('odds_betano')
-    if not isinstance(odds,(int,float)) or isinstance(odds,bool) or odds<=1:return False
-    if m.get('quote_type')=='promotional' or (source=='Betano' and m.get('betano_promotion')):return False
-    if m.get('api_fetch_error' if source=='API' else 'betano_fetch_error'):return False
-    if source=='Betano' and m.get('betano_http_status',200)>=400:return False
-    if source=='Betano' and m.get('betano_source_method')=='assisted_chrome_visible' and not m.get('betano_quote_valid'):return False
-    clocks=[m.get('api_captured_at' if source=='API' else 'betano_captured_at')]
-    if source=='API':clocks.append(m.get('api_updated_at'))
-    try:return all(v and -5<=(now-datetime.fromisoformat(v.replace('Z','+00:00'))).total_seconds()<=600 for v in clocks)
-    except (ValueError,TypeError):return False
+    from services.quote_review import check_quote
+    return check_quote(m,source,now)['valid']
 
 
 def _current_selection_view(data,now,automatic=False):
     """Filter only the original selections for display; do not rerun a policy."""
     view=deepcopy(data)
     for r in view.get('results',[]):
+        by_key={}
+        for market in r.get('all_markets',[]):by_key.setdefault(market.get('key'),[]).append(market)
         def visible(m):
             if not m:return False
             try:
                 if datetime.fromisoformat(r['kickoff_lima'])<=now:return False
             except (ValueError,KeyError):return False
-            if any(m.get(k) for k in ['manual_review_required','model_review_required','anomaly_flags']):return False
+            canonical=by_key.get(m.get('key'),[])
+            if len(canonical)!=1:return False
+            active=canonical[0]
+            if any(q.get(k) for q in [m,active] for k in ['manual_review_required','model_review_required','anomaly_flags']):return False
             if automatic and not .70<m.get('probability',0)<=.95:return False
             source=m.get('selection_quote_source')
-            selected_odds=m.get('selection_odds');original_odds=m.get('odds_betano') if source=='Betano' else m.get('odds_api',m.get('odds'))
-            return source in ['API','Betano'] and selected_odds==original_odds and _fresh(m,source,now)
+            selected_odds=m.get('selection_odds');active_odds=active.get('odds_betano') if source=='Betano' else active.get('odds_api',active.get('odds'))
+            active_book='Betano' if source=='Betano' else active.get('bookmaker_api') or active.get('bookmaker')
+            clock='betano_captured_at' if source=='Betano' else 'api_captured_at'
+            return (source in ['API','Betano'] and selected_odds==active_odds and m.get('selection_bookmaker')==active_book
+                and m.get('selection_quote_captured_at')==active.get(clock) and m.get('probability')==active.get('probability')
+                and (source!='API' or m.get('api_updated_at')==active.get('api_updated_at')) and _fresh(active,source,now))
         r['recommended_pick']=r.get('recommended_pick') if visible(r.get('recommended_pick')) else None
         r['alternative_picks']=[m for m in r.get('alternative_picks',[]) if visible(m)] if r['recommended_pick'] else []
     return view
 
 
-def render_report(data,path,title,*,now=None):
+def render_report_cards_legacy(data,path,title,*,now=None):
     now=now or datetime.now(timezone.utc);original=json.dumps(data,sort_keys=True,ensure_ascii=False)
     current=_current_selection_view(data,now);automatic=_current_selection_view(data,now,automatic=True)
     all_markets=[]
@@ -116,3 +116,8 @@ def render_report(data,path,title,*,now=None):
     page='<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+esc(title)+'</title><style>'+css+'</style></head><body data-report-matches="'+str(len(data.get('results',[])))+'" data-report-markets="'+str(len(all_markets))+'"><header><h1>'+esc(title)+'</h1><p>Fecha de partidos: <b>'+esc(date)+'</b> · Hora de corte Perú: <b>'+esc(lima(data.get('generated_at')))+'</b></p><span class="badge" id="report-state">'+state+'</span><p class="small">El análisis y esta vista no renuevan ninguna captura. Las cuotas pueden moverse; revalidar antes de usar.</p><div class="coverage">'+''.join('<div><b>'+str(n)+'</b><span>'+label+'</span></div>' for n,label in [(len(data.get('results',[])),'Partidos'),(len(all_markets),'Mercados'),(api_count,'Observaciones API históricas'),(betano_count,'Observaciones Betano históricas')])+'</div><p class="small">Cuotas dentro del TTL al generar esta vista: '+str(current_quote_count)+'. No es una consulta en vivo.</p></header><div class="tab-shell"><nav class="tabs" role="tablist" aria-label="Vistas del protocolo">'+nav+'</nav></div><main>'+panels+'</main><footer>Vista del reporte · Modelo '+esc(data.get('model_version'))+' · No calibrado prospectivamente. El modelo experimental no está activado.</footer><script>'+script+'</script></body></html>'
     path.write_text(page,encoding='utf-8',newline='\n');assert json.dumps(data,sort_keys=True,ensure_ascii=False)==original
     return {'html':str(path),'audit_json':str(path.parent/audit_name),'source_unchanged':True}
+
+
+def render_report(data,path,title,*,now=None,metric_evidence=None):
+    from services.report_table_view import render_tables
+    return render_tables(data,path,title,now=now,metric_evidence=metric_evidence)

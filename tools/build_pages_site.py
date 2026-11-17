@@ -143,10 +143,12 @@ def copy_reports() -> list[dict[str, str]]:
 
     if visible_html_files:
         latest_source = visible_html_files[0]
-        text = latest_source.read_text(encoding='utf-8')
-        audit_name = latest_source.stem + '_auditoria.json'
-        text = text.replace('href="' + audit_name + '"', 'href="reports/' + audit_name + '"')
-        (SITE / 'latest.html').write_text(text, encoding='utf-8')
+        latest_text = latest_source.read_text(encoding='utf-8')
+        # latest.html lives at the root; report downloads and sibling revisions
+        # remain in reports/. Never rewrite external or already rooted links.
+        latest_text = re.sub(r'href="(protocolo_[^"/]+\.(?:html|csv|json))"',
+                             r'href="reports/\1"', latest_text)
+        (SITE / 'latest.html').write_text(latest_text, encoding='utf-8')
 
     return reports
 

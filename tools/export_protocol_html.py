@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import csv
 import html
+import hashlib
 import json
 import sys
 from datetime import datetime
@@ -188,7 +189,7 @@ def build_rows(data: dict) -> tuple[list[dict], list[dict], dict[str, list[dict]
         audit_fields = result_audit(result)
         rec = result.get("recommended_pick") or {}
         markets = result.get("all_markets", [])
-        if not rec and data.get('selection_policy') != 'selection-v2':
+        if not rec and not data.get('selection_policy'):
             betano_candidates = [
                 market
                 for market in markets
@@ -244,6 +245,10 @@ def build_rows(data: dict) -> tuple[list[dict], list[dict], dict[str, list[dict]
         )
 
         for market in markets:
+            from services.quote_review import observed_quote
+            from services.report_table_view import probability_view
+            observed_api = observed_quote(market, 'API')
+            probability_label,probability_reason=probability_view(result,market)
             api_odds = numeric(market, "odds_api", "odds")
             api_ev = numeric(market, "ev_api", "ev")
             rows.append(
@@ -251,7 +256,14 @@ def build_rows(data: dict) -> tuple[list[dict], list[dict], dict[str, list[dict]
                     "fecha": result.get("date_lima", ""),
                     "hora": result.get("time_lima", ""),
                     "partido": result.get("match", ""),
-                    "bookmaker_api": (market.get("bookmaker_api") or market.get("bookmaker") or result.get("bookmaker") or "") if api_odds is not None else "",
+                    "bookmaker_api": observed_api['bookmaker'] or result.get("bookmaker") or "",
+                    "api_precio_observado_historico": observed_api['odds'],
+                    "api_consulta_original_historica": observed_api['captured_at'],
+                    "api_update_original_historico": observed_api['provider_updated_at'],
+                    "naturaleza_reporte": "Foto histórica al corte; cuota_api y cuota_betano son precios validados al corte, no cotizaciones actuales",
+                    "hora_corte_original": data.get('generated_at'),
+                    "estado_estimacion": probability_label,
+                    "respaldo_estimacion": probability_reason,
                     "bookmaker_betano": market.get("bookmaker_betano") or ("Betano" if market.get("odds_betano") is not None else ""),
                     "pick": clean(market.get("market")),
                     "market_original": market.get("market") or "",
@@ -287,6 +299,14 @@ def build_rows(data: dict) -> tuple[list[dict], list[dict], dict[str, list[dict]
                     "razon": market.get("reason") or "",
                     "riesgo": market.get("risk") or "",
                     "betano_url": market.get("betano_source_url") or result.get("betano_source_url") or "",
+                    'betano_procedencia':market.get('betano_provenance') or market.get('betano_source_method') or '',
+                    'betano_captura':market.get('betano_captured_at') or '',
+                    'api_captura':market.get('api_captured_at') or '',
+                    'api_actualizacion_proveedor':market.get('api_updated_at') or '',
+                    'api_cuota_observada_no_vigente':(market.get('api_quote_observation') or {}).get('odds') if (market.get('api_quote_observation') or {}).get('validation_error') else '',
+                    'api_motivo_descarte':(market.get('api_quote_observation') or {}).get('validation_error') or '',
+                    'validacion_cuotas':json.dumps(market.get('quote_validation_errors',{}),ensure_ascii=False),
+                    'betano_etiqueta':market.get('betano_selection_label') or '',
                     **audit_fields,
                 }
             )
@@ -311,6 +331,13 @@ def write_csv(rows: list[dict], path: Path) -> None:
         "hora",
         "partido",
         "bookmaker_api",
+        "api_precio_observado_historico",
+        "api_consulta_original_historica",
+        "api_update_original_historico",
+        "naturaleza_reporte",
+        "hora_corte_original",
+        "estado_estimacion",
+        "respaldo_estimacion",
         "bookmaker_betano",
         "pick",
         "market_original",
@@ -346,6 +373,14 @@ def write_csv(rows: list[dict], path: Path) -> None:
         "razon",
         "riesgo",
         "betano_url",
+        'betano_procedencia',
+        'betano_captura',
+        'api_captura',
+        'api_actualizacion_proveedor',
+        'api_cuota_observada_no_vigente',
+        'api_motivo_descarte',
+        'validacion_cuotas',
+        'betano_etiqueta',
         "modelo_base",
         "fuente_local",
         "partidos_local",
@@ -398,7 +433,7 @@ def as_number(value: Any, default: float = -999.0) -> float:
         return default
 
 
-def build_combo_rows(rows: list[dict]) -> list[dict]:
+def build_combo_rows(rows: list[dict],max_alternatives=2) -> list[dict]:
     grouped: dict[str, list[dict]] = {}
     for row in rows:
         if row.get('rol_seleccion') != 'Alternativa':
@@ -427,7 +462,7 @@ def build_combo_rows(rows: list[dict]) -> list[dict]:
         for row in ranked:
             if compatible_keys([r['key'] for r in selected]+[row['key']]):
                 selected.append(row)
-            if len(selected) == 2:
+            if len(selected) == max_alternatives:
                 break
         for idx, row in enumerate(selected, 1):
             combo.append(
@@ -450,12 +485,23 @@ def build_combo_rows(rows: list[dict]) -> list[dict]:
     return combo
 
 
-def write_html(rows, summary, data, src, title, path):
+def write_html(rows: list[dict], summary: list[dict], data: dict, src: Path, title: str, path: Path, *, metric_evidence=None) -> None:
     from services.report_template import render_report
-    render_report(data,path,title)
+    render_report(data,path,title,metric_evidence=metric_evidence)
 
 
 def write_html_legacy(rows: list[dict], summary: list[dict], data: dict, src: Path, title: str, path: Path) -> None:
+    from services.report_quality_view import compact_quality_views
+    quality_views=compact_quality_views(data)
+    assisted=data.get('betano_assisted_integration')
+    betano_note='Betano: captura de Chrome asistido, con hora y URL propias; scraper autónomo no verificado por HTTP 403.' if assisted else 'Betano: cuotas capturadas en betano.pe; revisar hora y vigencia.'
+    assisted_html=''
+    if assisted:
+        trace=[{key:r.get(key) for key in ['partido','key','cuota_betano','ev_betano','betano_procedencia','betano_captura','betano_etiqueta','betano_url']} for r in rows if r.get('betano_captura')]
+        excluded=assisted.get('excluded',[])
+        assisted_html='<section class="card"><h2>Chrome asistido · nueva versión local</h2><p>Autónomo: Betano no verificado (HTTP 403). Promociones y capturas vencidas excluidas de picks y EV.</p><h3>Cuotas integradas y trazabilidad</h3><pre style="white-space:pre-wrap">'+html.escape(json.dumps(trace,ensure_ascii=False,indent=2))+'</pre><details><summary>Promociones y mercados no integrados</summary><pre style="white-space:pre-wrap">'+html.escape(json.dumps(excluded,ensure_ascii=False,indent=2))+'</pre></details></section>'
+    if assisted_html:
+        assisted_html='<details class="card"><summary>Auditoría de Chrome: trazabilidad y JSON</summary>'+assisted_html+'</details>'
     player_rows = []
     for match in data.get('results', []):
         for player in (match.get('player_analysis') or {}).get('options', []):
@@ -500,7 +546,7 @@ def write_html_legacy(rows: list[dict], summary: list[dict], data: dict, src: Pa
         "<tr>" + "".join(f"<td>{html.escape(str(item[key]))}</td>" for key in summary_keys) + "</tr>"
         for item in summary
     )
-    combo = build_combo_rows(rows)
+    combo = build_combo_rows(rows,max_alternatives=3 if data.get('automatic_min_probability') is not None else 2)
     combo_rows = "\n".join(
         "<tr>"
         + "".join(
@@ -623,6 +669,7 @@ th{{position:sticky;top:0;background:#18233a;z-index:2;color:#cfe0ff;cursor:poin
 </style>
 </head>
 <body>
+{quality_views}
 <header>
   <h1>{html.escape(title)}</h1>
   <div class="meta">Generado: {html.escape(datetime.now().strftime("%Y-%m-%d %H:%M"))} · Modelo: {html.escape(data.get('model_version','legacy-exact-v1'))} · Selección v2 · {len(summary)} partidos · {len(rows)} mercados</div>
@@ -638,15 +685,16 @@ th{{position:sticky;top:0;background:#18233a;z-index:2;color:#cfe0ff;cursor:poin
     <button onclick="viewPanel('mercados')">Todos los mercados</button><button onclick="viewPanel('jugadores')">Jugadores · observación</button><button onclick="viewPanel('auditoria')">Auditoría</button>
   </nav>
   {fixture_notes}
+  {assisted_html}
   <section class="card panel" data-view="principales">
-    <h2>Pick principal por partido · o Sin apuesta</h2>
+    <h2>Histórico: principal por partido al corte · o Sin apuesta</h2>
     <div class="kpis">
       <div class="kpi"><span class="small">Partidos</span><b>{len(summary)}</b></div>
       <div class="kpi"><span class="small">Mercados</span><b>{len(rows)}</b></div>
       <div class="kpi"><span class="small">Con cuota API-Football</span><b>{sum(1 for row in rows if row["cuota_api"])}</b></div>
       <div class="kpi"><span class="small">Con cuota Betano</span><b>{sum(1 for row in rows if row["cuota_betano"])}</b></div>
     </div>
-    <p class="small"><span class="badge">Nota</span> API-Football puede devolver distintos bookmakers; la columna <b>Book API-Football</b> muestra la casa real disponible para cada mercado. <b>Cuota justa</b> es 1/probabilidad del modelo. Betano se scrapea en vivo desde betano.pe y puede cambiar.</p>
+    <p class="small"><span class="badge">Nota</span> API-Football puede devolver distintos bookmakers; la columna <b>Book API-Football</b> muestra la casa real disponible para cada mercado. <b>Cuota justa</b> es 1/probabilidad del modelo. {betano_note}</p>
     <div class="tablewrap" style="max-height:none;margin-top:14px">
       <table id="summary">
         <thead><tr><th>Hora</th><th>Partido</th><th>Pick principal</th><th>Prob</th><th>Cuota justa</th><th>Cuota API-Football</th><th>EV API-Football</th><th>Cuota Betano</th><th>EV Betano</th><th>Score</th><th>Perfil</th><th>Cobertura Betano</th><th>Mercados</th><th>Con API-Football</th><th>Con Betano</th><th>EV+ API-Football</th><th>EV+ Betano</th></tr></thead>
@@ -655,6 +703,7 @@ th{{position:sticky;top:0;background:#18233a;z-index:2;color:#cfe0ff;cursor:poin
     </div>
   </section>
   <section class="card panel" data-view="auditoria" hidden>
+    <details><summary>Desplegar auditoría del modelo e inputs usados</summary>
     <h2>Auditoría del modelo: últimos partidos usados</h2>
     <p class="small">Esta tabla muestra los partidos recientes que alimentaron el cálculo por equipo. Si el torneo actual no tiene muestra suficiente, el modelo usa fallback multi-competición; por ejemplo Liga, copas y amistosos recientes disponibles en API-Football.</p>
     <div class="tablewrap" style="max-height:58vh">
@@ -663,10 +712,11 @@ th{{position:sticky;top:0;background:#18233a;z-index:2;color:#cfe0ff;cursor:poin
         <tbody>{"".join(audit_rows)}</tbody>
       </table>
     </div>
+    </details>
   </section>
   <section class="card panel" data-view="alternativas" hidden>
-    <h2>Alternativas · Vista combinada sugerida en revisión</h2>
-    <p class="small">Hasta dos candidatos de familias distintas. Son opciones para elegir: no una combinada validada ni una probabilidad conjunta. No se exige completar picks por partido.</p>
+    <h2>Alternativas históricas al corte · no combinada validada</h2>
+    <p class="small">Hasta {'tres' if data.get('automatic_min_probability') is not None else 'dos'} candidatos de familias distintas. Son opciones para elegir: no una combinada validada ni una probabilidad conjunta. No se exige completar picks por partido.</p>
     <div class="tablewrap" style="max-height:55vh">
       <table id="combo">
         <thead><tr><th>Partido</th><th>#</th><th>Pick</th><th>Perfil</th><th>Prob</th><th>Cuota justa</th><th>Book API-Football</th><th>Cuota API-Football</th><th>EV API-Football</th><th>Cuota Betano</th><th>EV Betano</th><th>Score</th><th>Alerta</th></tr></thead>
@@ -746,20 +796,28 @@ def main() -> None:
     parser.add_argument("--date", required=True)
     parser.add_argument("--prefix", required=True)
     parser.add_argument("--output-dir", default="outputs")
+    parser.add_argument("--metric-evidence", help="Auditoría de métricas ligada por SHA-256 al snapshot fuente")
     args = parser.parse_args()
 
     src = Path(args.source)
     out = Path(args.output_dir)
     out.mkdir(exist_ok=True)
     data = json.load(open(src, encoding="utf-8"))
-    data = apply_policy(data)
+    # Export is a view of the source snapshot. Current eligibility is evaluated
+    # separately by the template, never by rewriting historical selections/odds.
     rows, summary, top_ev = build_rows(data)
 
     html_path = out / f"{args.prefix}.html"
     csv_path = out / f"{args.prefix}_todos_los_mercados.csv"
     write_csv(rows, csv_path)
     write_player_csv(data, out / f'{args.prefix}_jugadores.csv')
-    write_html(rows, summary, data, src, build_title(data, args.date), html_path)
+    metric_evidence=None
+    if args.metric_evidence:
+        metric_payload=json.loads(Path(args.metric_evidence).read_text(encoding='utf-8'))
+        if metric_payload.get('source_sha256')!=hashlib.sha256(src.read_bytes()).hexdigest():
+            raise ValueError('La auditoría de métricas no corresponde al snapshot fuente')
+        metric_evidence=metric_payload['rows']
+    write_html(rows, summary, data, src, build_title(data, args.date), html_path, metric_evidence=metric_evidence)
 
     print(html_path.resolve())
     print(csv_path.resolve())
